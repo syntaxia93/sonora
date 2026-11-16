@@ -2,8 +2,9 @@ use gpui::{App, Context, Menu, MenuItem, OsAction};
 use i18n::t;
 use input::{
     CloseWindow, DecreaseFontSize, Hide, HideOthers, IncreaseFontSize, MinimizeWindow,
-    OpenSettings, Quit, Redo, Refresh, ResetFontSize, ShowAll, SignOut, SongNext, SongPrevious,
-    TogglePlayback, ToggleRepeat, ToggleShuffle, Undo, ZoomWindow,
+    OpenSettings, Quit, Redo, Refresh, ResetFontSize, SeekBack, SeekForward, ShowAll, SignOut,
+    SongNext, SongPrevious, TogglePlayback, ToggleRepeat, ToggleShuffle, Undo, VolumeDown,
+    VolumeUp, ZoomWindow,
 };
 use router::Destination;
 use state::{AppSettings, Equalizer, Shelf, Sonora};
@@ -46,13 +47,17 @@ pub fn register(lingers: bool, cx: &mut App) {
             }
             at if !at.refreshes() => {}
             at => {
-                let shelf = match at {
-                    Destination::Local(_) => Shelf::Local,
-                    Destination::Album(id) | Destination::Playlist(id) => Shelf::of(&id),
-                    _ => Shelf::Streaming,
-                };
                 let library = Sonora::global(cx).library.clone();
-                library.update(cx, |library, cx| library.refresh(shelf, cx));
+                library.update(cx, |library, cx| match at {
+                    Destination::Album(id) | Destination::Playlist(id) => {
+                        library.refresh(Shelf::of(&id), cx)
+                    }
+                    Destination::Library(_) => {
+                        library.refresh(Shelf::Streaming, cx);
+                        library.refresh(Shelf::Local, cx);
+                    }
+                    _ => library.refresh(Shelf::Streaming, cx),
+                });
             }
         },
     );
@@ -71,6 +76,11 @@ pub fn register(lingers: bool, cx: &mut App) {
         let playback = Sonora::global(cx).playback.clone();
         playback.update(cx, |playback, cx| playback.next(cx));
     });
+
+    cx.on_action(|_: &VolumeUp, cx: &mut App| nudge_volume(cx, 1));
+    cx.on_action(|_: &VolumeDown, cx: &mut App| nudge_volume(cx, -1));
+    cx.on_action(|_: &SeekBack, cx: &mut App| skip(cx, false));
+    cx.on_action(|_: &SeekForward, cx: &mut App| skip(cx, true));
 
     cx.on_action(|_: &ToggleShuffle, cx: &mut App| {
         let playback = Sonora::global(cx).playback.clone();
@@ -175,6 +185,18 @@ fn menus() -> Vec<Menu> {
         });
     }
     menus
+}
+
+/// Turns the volume by `steps` notches, the same step the volume wheel takes.
+fn nudge_volume(cx: &mut App, steps: i8) {
+    let playback = Sonora::global(cx).playback.clone();
+    playback.update(cx, |playback, cx| playback.nudge_volume(steps, cx));
+}
+
+/// Moves 5 seconds forward or back through the track, the same step as the media keys.
+fn skip(cx: &mut App, forward: bool) {
+    let playback = Sonora::global(cx).playback.clone();
+    playback.update(cx, |playback, cx| playback.skip(forward, cx));
 }
 
 /// Runs `edit` on the equalizer while its screen is the one shown, the only place undo applies.
