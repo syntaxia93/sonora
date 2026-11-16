@@ -1,49 +1,61 @@
 name: ci
 
-# Only the target this copy ships. A pull request costs one windows job, which formats, lints and
-# tests the workspace, instead of a linux check plus a macOS and a Windows lint, and no release
-# build runs here at all: the windows workflow cuts the installer on demand.
+# This copy ships Windows. Check its whole workspace in one job, and cut the installer on demand.
 on:
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - .github/ISSUE_TEMPLATE/**
+      - .coderabbit.yaml
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_PROFILE_RELEASE_STRIP: symbols
   RUST_BACKTRACE: 1
-  RUSTC_WRAPPER: sccache
-  SCCACHE_GHA_ENABLED: "true"
 
 jobs:
   check:
     name: fmt, clippy and tests
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Keep Cargo's many small files on ReFS, as upstream's Windows builds do.
+      - uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
         with:
-          components: rustfmt, clippy
+          drive-size: 40GB
+          workspace-copy: true
 
-      - uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: Swatinem/rust-cache@v2
+      # Install the toolchain and components pinned by rust-toolchain.toml once.
+      - name: rust toolchain
+        working-directory: ${{ env.DEV_DRIVE_WORKSPACE || github.workspace }}
+        run: rustup toolchain install
+
+      # The target cache already holds the check and test outputs; sccache would duplicate it.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: ci-check
+          workspaces: ${{ env.DEV_DRIVE_WORKSPACE || github.workspace }}
           cache-on-failure: true
 
       - name: rustfmt
+        working-directory: ${{ env.DEV_DRIVE_WORKSPACE || github.workspace }}
         run: cargo fmt --all --check
 
       - name: clippy
+        working-directory: ${{ env.DEV_DRIVE_WORKSPACE || github.workspace }}
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      # Tests do not need the optimization overrides used by interactive debug builds.
       - name: tests
-        run: cargo test --workspace --locked
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats
+        working-directory: ${{ env.DEV_DRIVE_WORKSPACE || github.workspace }}
+        run: >-
+          cargo test --workspace --locked
+          --config 'profile.dev.debug="line-tables-only"'
+          --config 'profile.dev.package.ui.opt-level=0'
+          --config 'profile.dev.package.views.opt-level=0'
+          --config 'profile.dev.package.music.opt-level=0'
