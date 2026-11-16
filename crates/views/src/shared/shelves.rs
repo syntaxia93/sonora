@@ -1,9 +1,9 @@
 use gpui::accesskit::Role;
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, App, Axis, Context, Div, ElementId, Entity, EntityId, FontWeight, Hsla, Pixels, Point,
-    ScrollHandle, ScrollWheelEvent, SharedString, Stateful, WeakEntity, Window, div, linear_color_stop,
-    linear_gradient, point, px,
+    AnyElement, App, Axis, Context, Div, ElementId, Entity, EntityId, FontWeight, Hsla, Pixels,
+    Point, ScrollHandle, ScrollWheelEvent, SharedString, Stateful, WeakEntity, Window, div,
+    linear_color_stop, linear_gradient, point, px,
 };
 use std::rc::Rc;
 
@@ -11,7 +11,8 @@ use music::{GenreItem, GenreSection};
 use router::{Destination, navigate};
 use state::Playback;
 use ui::{
-    ActiveTheme as _, Artwork, Button, Card, Deck, Glide, Hold, Mode, Skeleton, Text, heading, snapped,
+    ActiveTheme as _, Artwork, Button, Card, Deck, Glide, Hold, Mode, Skeleton, Text, heading,
+    snapped,
 };
 
 use crate::shared::album_grid::CardGrid;

@@ -54,6 +54,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Lyrics from a previous account no longer carry over when switching services or changing the server library.
 - Tag editing, deleting a track file and other dialogs opened from the fullscreen player now show over it, and so do toasts.
 - The follow and return buttons on fullscreen lyrics and the queue stay sharp above the visualizer instead of under it.
 - Resizing the window or a sidebar keeps the cards, rails and lyrics you were looking at in view on Home, provider pages, album and playlist pages and search, instead of jumping elsewhere.
