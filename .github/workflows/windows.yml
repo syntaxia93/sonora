@@ -1,8 +1,6 @@
 name: windows
-# The release workflow builds every target and only publishes on a tag, and the check workflow
-# skips its build job on a pull request. This one is the short path: the Windows executable and
-# the Inno Setup installer that ships it, cut on demand for the version it is given, which becomes
-# the release's tag and title, with the commits since the last release written out as its notes.
+
+# Build the Windows x64 installer on demand for the synced upstream version.
 on:
   workflow_dispatch:
     inputs:
@@ -10,6 +8,7 @@ on:
         description: Version to publish, as a tag and a release title
         type: string
         required: true
+        default: "0.50.0"
 
 concurrency:
   group: windows-${{ github.ref }}
@@ -29,37 +28,63 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
+        with:
+          drive-size: 40GB
+      - name: put the target directory on the Dev Drive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:DEV_DRIVE/target" | Out-Null
+          New-Item -ItemType Junction -Path target -Target "$env:DEV_DRIVE/target" | Out-Null
 
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - name: rust toolchain
+        run: rustup toolchain install
 
-      - uses: Swatinem/rust-cache@v2
+      - name: verify the release version
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $manifest = Get-Content Cargo.toml -Raw
+          $package = [regex]::Match($manifest, '(?ms)^\[workspace\.package\]\r?\n(.*?)(?=^\[|\z)').Groups[1].Value
+          $expected = [regex]::Match($package, '(?m)^version = "([^"]+)"').Groups[1].Value
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$' -or $env:VERSION -cne $expected) {
+            throw "release version must match Cargo.toml ($expected)"
+          }
+
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: x86_64-pc-windows-msvc
           cache-targets: false
           cache-on-failure: true
 
+      # Shipping releases keep the full release profile, including LTO.
       - name: build
-        run: cargo build --release --locked --package sonora --target x86_64-pc-windows-msvc
+        run: cargo build --release --locked --package sonora --target x86_64-pc-windows-msvc --timings
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        continue-on-error: true
+        with:
+          name: timings-x86_64-pc-windows-msvc
+          path: target/cargo-timings/cargo-timing.html
 
       - name: sccache stats
         if: always()
         run: sccache --show-stats
 
-      # Inno Setup writes into this directory, so it has to exist before the script runs.
       - name: prepare the output directory
         shell: pwsh
         run: New-Item -ItemType Directory -Force dist | Out-Null
 
-      # The same steps the release workflow takes, for the one target it can take here.
       - name: install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
 
-      # The wizard art and the language Setup settles on come from the compiler's own files, so
-      # report which compiler this is and that it carries the Chinese messages.
+      # Report the compiler and its Chinese language files before building the wizard.
       - name: report the compiler
         shell: pwsh
         run: |
@@ -72,23 +97,15 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ inputs.version }}
-          # x64compatible for the x64 build, arm64 for the ARM one
           SONORA_ARCH: x64compatible
-          # Sonora-Setup for the x64 build, Sonora-Setup-arm64 for the ARM one
           SONORA_SETUP: Sonora-Setup
         run: |
-          $number = $env:VERSION.TrimStart("v")
-          if ($number -notmatch '^\d+\.\d+\.\d+([.-][0-9A-Za-z.-]+)?$') {
-            $number = "0.0.0"
-          }
-          $env:SONORA_VERSION = $number
+          $env:SONORA_VERSION = $env:VERSION
           $env:SONORA_EXE = (Resolve-Path "target/x86_64-pc-windows-msvc/release/sonora.exe").Path
           $env:SONORA_DIST = (Resolve-Path "dist").Path
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "scripts/windows/sonora.iss"
 
-
-      # The updater reads the checksum from a file beside the installer, so a download that
-      # arrived damaged is thrown away rather than run.
+      # The updater verifies this checksum file before running a downloaded installer.
       - name: write the checksums
         shell: pwsh
         run: |
@@ -110,8 +127,6 @@ jobs:
           $tag = "windows-$env:VERSION"
           gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null | Out-Null
           if ($LASTEXITCODE -ne 0) {
-            # The version is the title, and this paragraph is followed by what the commits since
-            # the last release say, so a build explains itself on the releases page.
             $notes = "Windows x64 build of this Sonora fork: download the installer below. It needs no administrator rights. The build is unsigned, so SmartScreen asks for 'More info -> Run anyway' the first time."
             gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:SHA --title $env:VERSION --notes $notes --generate-notes
           }

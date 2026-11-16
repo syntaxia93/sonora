@@ -604,6 +604,7 @@ impl MusicApi for NavidromeClient {
             banner: None,
             biography,
             monthly_listeners: None,
+            followers: None,
             top_tracks,
             albums,
         })

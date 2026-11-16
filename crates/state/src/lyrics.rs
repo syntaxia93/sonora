@@ -8,7 +8,7 @@ use music::{LyricsHit, LyricsProvider, LyricsQuery, Track, TrackKey};
 use tokio::task::JoinSet;
 
 use crate::sheets::{Sheets, Unsaved};
-use crate::{AppSettings, Io, Playback, Queue, QueuePosition, Session, join};
+use crate::{AppSettings, Io, Playback, Queue, QueuePosition, Session, SessionEvent, join};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LyricsState {
@@ -80,7 +80,27 @@ impl Lyrics {
             this.prefetch(cx);
         })
         .detach();
+        // a lookup ahead that waited on the current track's is started on a later tick
+        let ticks = playback.read(cx).ticks().clone();
+        cx.observe(&ticks, |this, _, cx| {
+            this.follow(cx);
+            this.prefetch(cx);
+        })
+        .detach();
         cx.observe(&queue, |this, _, cx| this.prefetch(cx)).detach();
+        cx.subscribe(&session, |this, _, event, cx| {
+            if matches!(event, SessionEvent::SignedOut) {
+                this.task = None;
+                this.ahead = None;
+                this.ahead_of = None;
+                this.recent.clear();
+                this.dropped = None;
+                // Queued writes already carry their keys, but lookups and memory belong to
+                // the session that started them and cannot cross an account or library change.
+                this.forget(cx);
+            }
+        })
+        .detach();
         cx.observe(&settings, |this, settings, cx| {
             let settings = settings.read(cx);
             let on = settings.lyrics_enabled();

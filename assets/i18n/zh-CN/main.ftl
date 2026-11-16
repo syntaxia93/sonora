@@ -19,11 +19,13 @@ common-clear = 清空
 number-group = { "," }
 
 # navigation
-nav-history = 历史记录
+nav-history = 最近播放
 nav-home = 首页
 nav-search = 搜索
 nav-library = 你的音乐库
+sidebar-library = 音乐库
 nav-settings = 设置
+account-manage = 管理账户
 nav-songs = 歌曲
 nav-albums = 专辑
 nav-playlists = 播放列表
@@ -31,6 +33,7 @@ nav-artists = 歌手
 nav-local = 本地音乐
 nav-back = 返回
 nav-forward = 前进
+nav-trail = 导航历史
 nav-sidebar = 切换侧边栏
 nav-sidebar-right = 显示或隐藏歌词和播放队列
 nav-pinned = 已固定
@@ -151,6 +154,10 @@ menu-play-artist = 播放歌手
 # playlist editor
 playlist-name-placeholder = 播放列表名称
 playlist-create-title = 创建播放列表
+cover-view = 查看封面
+cover-zoom-in = 放大
+cover-zoom-out = 缩小
+cover-zoom-fit = 适应窗口
 playlist-delete-title = 删除播放列表
 playlist-delete-confirm = 删除“{ $name }”？此操作无法撤销。
 playlist-again-title = 再次添加？
@@ -230,11 +237,13 @@ filter-album = 筛选专辑歌曲
 filter-reset = 重置筛选
 filter-duration = 时长
 filter-year = 年份
-filter-playable = 仅播放
+filter-hide-explicit = 隐藏露骨内容
 filter-favorites = 仅收藏
 filter-owned = 由你拥有
 
 # view
+filter-local-only = 仅本地音乐
+filter-streaming-only = 仅在线音乐
 view-list = 列表
 view-cards = 网格
 
@@ -243,15 +252,17 @@ tool-sort = 排序
 tool-filters = 筛选
 
 # login
+tool-account = 账户
 login-signed-out = 登录以加载你的音乐库
 login-restoring = 正在检查已保存的会话…
 login-authorizing = 正在浏览器中等待授权…
 login-signed-in = 已登录为 { $name }
 login-failed-title = 登录失败
 login-problem-region = Spotify 不会从你所在的国家/地区开启会话。请从你的所在国家/地区登录，或更改 Spotify 账户上的国家/地区。
-login-problem-credentials = 你保存的 Spotify 会话已失效。请重新登录以继续。
+login-problem-credentials = 你保存的此服务会话已失效。请重新登录以继续。
+login-problem-password = 服务器未接受此用户名和密码。请检查后重试。
 login-problem-network = Sonora 无法连接到音乐服务。请检查网络连接并重试。
-login-problem-cancelled = 你在批准登录之前关闭了浏览器页面。请重新开始以完成登录。
+login-problem-cancelled = 浏览器中的登录未获授权，或已超时。请重新开始以完成登录。
 login-problem-refused = Spotify 拒绝了登录请求。请稍等片刻后重试。
 login-problem-premium = Sonora 通过 Spotify Premium 串流，而此账户没有 Premium。请使用 Premium 账户登录以继续。
 login-sign-in = 使用 { $provider } 登录
@@ -282,17 +293,25 @@ login-guest-detail = 无需账户即可浏览和播放。你的音乐库、收�
 login-usage-consent = 帮助我们估算有多少人使用 Sonora。
 login-device-code = 在 { $url } 输入此代码
 login-server-title = 连接到你的音乐服务器
-login-server-detail = 输入任意 Subsonic 或 OpenSubsonic 服务器（Navidrome、Airsonic、Gonic……）的地址，然后使用服务器用户名和密码登录。会话会保留在此设备上。
+login-server-detail = Navidrome、Gonic 或其他 OpenSubsonic 服务器。
 login-server-hint = https://music.example.com
+login-jellyfin-title = 连接到 Jellyfin
+login-jellyfin-detail = 使用你的 Jellyfin 账户登录。
+login-quick-connect = 使用 Quick Connect 登录
 login-username-hint = 用户名
 login-password-hint = 密码
-login-server-submit = 连接
+login-server-submit = 登录
 login-account-title = 选择一个账户
 login-account-detail = 此会话登录了多个 Google 账户。请选择 Sonora 应使用的账户。
+login-profile-title = 选择用户档案
+login-profile-detail = 此账户有多个用户档案。请选择 Sonora 要使用的档案。
 login-choose-title = 登录 { $provider }
 login-choose-detail = 选择登录 { $provider } 的方式。
 
 # album and playlist pages
+login-welcome-title = 欢迎使用 Sonora
+login-welcome-detail = 稍后可在设置中添加更多服务。
+login-or = 或
 detail-playlist = 播放列表
 
 # play button
@@ -305,6 +324,10 @@ artist-eyebrow = 歌手
 artist-monthly-listeners = { $count ->
     [one] { $value } 位每月听众
    *[other] { $value } 位每月听众
+}
+artist-followers = { $count ->
+    [one] { $value } 位关注者
+   *[other] { $value } 位关注者
 }
 artist-popular = 热门
 artist-popular-eyebrow = 探索这位歌手
@@ -349,6 +372,7 @@ release-meta = { $year } • { $kind }
 home-quick-picks = 快速推荐
 home-quick-picks-empty = 收藏几首歌后，它们会显示在这里
 home-recently-added = 最近添加
+home-most-played = 最常播放
 home-playlists = 播放列表
 home-favorite-albums = 收藏的专辑
 home-artists = 歌手
@@ -403,6 +427,7 @@ song-genres = 流派
 song-language = 语言
 song-content = 内容
 song-explicit = 露骨内容
+song-local = 本地文件
 song-clean = 干净版
 artist-about = 关于歌手
 artist-about-fallback = 探索这位歌手的热门歌曲和发行作品。
@@ -511,7 +536,10 @@ settings-font-detail = 基础文字大小，其他所有内容随之缩放
 settings-font-value = { $size } px
 settings-startup = 欢迎页
 settings-startup-detail = Sonora 启动时打开的页面
-settings-startup-no-guest = 访客模式下不可用
+settings-provider = 音乐服务
+settings-provider-detail = Sonora 启动时使用的音乐服务
+settings-provider-last-used = 上次使用的服务
+settings-provider-unavailable = { $name }（不可用）
 settings-entries = 侧边栏项
 settings-entries-detail = 侧边栏中显示的项
 settings-entries-pick = 选择项
@@ -540,6 +568,8 @@ settings-close-to-tray = 关闭主窗口
 settings-close-to-tray-detail = 窗口关闭后将 Sonora 保留在系统托盘中并继续播放
 settings-tray-icon = 在系统托盘中显示
 settings-tray-icon-detail = 在系统托盘中放置带播放控制的图标
+settings-jellyfin-remote = 允许 Jellyfin 应用控制 Sonora
+settings-jellyfin-remote-detail = 在 Jellyfin 应用和控制台中显示 Sonora，供其远程控制；也可从设备菜单在其他 Jellyfin 应用上播放
 settings-discord = 在 Discord 上显示
 settings-discord-detail = 将你正在播放的歌曲显示在 Discord 个人资料上
 settings-discord-name = 状态名称
@@ -568,6 +598,8 @@ settings-fullscreen-controls-autohide-always-shown = 始终显示
 settings-normalisation = 系统音量
 settings-normalisation-detail = 保持歌曲音量一致
 settings-gapless = 无缝播放
+settings-sponsorblock = SponsorBlock
+settings-sponsorblock-detail = 通过 SponsorBlock 跳过 YouTube Music 中由社区标记的赞助、自我推广和非音乐片段
 settings-gapless-detail = 歌曲之间无间隙地连续播放，如同专辑原本的编排
 settings-sleep = 睡眠定时器
 settings-sleep-detail = 让音乐在设定时间后自动停止，伴你入眠
@@ -640,6 +672,7 @@ settings-lyrics-providers-selected = { $count ->
    *[other] 已选择 { $count } 个
 }
 settings-lyrics-provider-local = 本地文件
+settings-lyrics-provider-jellyfin = Jellyfin
 settings-lyrics-provider-spotify = Spotify
 settings-lyrics-provider-youtube = YouTube Music
 settings-lyrics-provider-apple-music = Apple Music
@@ -691,12 +724,14 @@ settings-local-folder-empty = 未配置
 settings-choose-folder = 选择文件夹…
 settings-add-folder = 添加文件夹
 settings-remove-folder = 移除文件夹
+settings-open-folder = 打开文件夹
 settings-rescan = 重新扫描
 settings-scan-walking = 正在扫描…
 settings-scan-progress = { $percent }%
 settings-scan-done = 用时 { $seconds } 秒
 settings-version = 版本
 settings-version-detail = 你正在运行的 Sonora 版本
+settings-version-commit = { $version }（{ $commit }）
 settings-license = 许可证
 settings-license-detail = GNU 通用公共许可证第 3 版或更高版本
 settings-source = 源代码
@@ -730,6 +765,7 @@ saver-off = 关
 
 toast-playlist-created = 播放列表已创建
 toast-playlist-renamed = 播放列表已重命名
+toast-playlist-reorder-unsupported = 此服务不允许 Sonora 调整播放列表顺序
 toast-playlist-deleted = 播放列表已删除
 toast-local-delete-failed = 部分歌曲文件无法删除
 toast-playlist-added = 播放列表已添加到你的音乐库
@@ -759,6 +795,7 @@ toast-track-unplayable = { $name } 无法播放
 toast-playback-stopped = 连续多首歌曲无法播放，播放已停止
 toast-throttled = { $name } 正在限制播放。稍后会自动重试
 toast-still-throttled = { $name } 仍在限制播放。按播放键重试
+toast-subsonic-library-failed = 无法保存音乐库选择
 toast-library-add-failed = { $name } 无法添加到你的音乐库
 toast-library-remove-failed = { $name } 无法从你的音乐库中移除
 toast-library-added = 已添加到你的音乐库
@@ -837,6 +874,9 @@ trouble-offline = 无网络连接
 trouble-offline-detail = 检查你的网络连接后重试。
 trouble-not-loaded = 加载失败
 trouble-retry = 重试
+trouble-busy = 服务繁忙
+trouble-busy-detail = 短时间内发送了过多请求。请稍等一分钟后重试。
+trouble-failed-detail = 服务端出现了问题。请稍后重试。
 toast-offline = 无网络连接。恢复之前无法串流播放。
 toast-settings-broken = 请修复 settings.json 第 { $name } 行后再保存更改
 toast-tray-unavailable = 没有可放置图标的系统托盘
@@ -884,7 +924,6 @@ devices-jam-invite-detail = { $count ->
 devices-jam-invite-join = 加入
 
 # filters
-filter-hide-explicit = 隐藏露骨内容
 filter-downloaded = 已下载
 
 # settings
@@ -951,6 +990,8 @@ settings-license-short = GPL-3.0 或更高版本
 settings-preview-title = 歌曲标题
 settings-preview-artist = 歌手
 settings-preview-album = 专辑
+settings-now-playing-on-file-open = 打开文件时显示正在播放
+settings-now-playing-on-file-open-detail = 从文件管理器打开文件时，切换到正在播放视图
 settings-spotify-connect = 在 Spotify 中显示为播放设备
 settings-spotify-connect-name = 设备名称
 settings-spotify-connect-name-detail = Sonora 在 Spotify 应用的设备列表里如何显示
@@ -1010,6 +1051,11 @@ settings-stream-bitrate-unlimited = 不限制
 settings-stream-bitrate-value = { $kbps } kbps
 settings-stream-bitrate-hourly = 每小时约 { $megabytes } MB
 settings-stream-bitrate-unlimited-detail = 每个文件保持自己的码率
+settings-subsonic-library = 音乐库
+settings-subsonic-library-all = 所有音乐库
+settings-subsonic-library-unnamed = 音乐库 { $id }
+settings-subsonic-library-unavailable = 此服务器已不再提供此音乐库
+settings-subsonic-library-retry = 重试
 settings-output-device = 输出设备
 settings-output-device-detail = Sonora 播放所用的音频设备
 settings-output-device-system = 系统默认
@@ -1467,6 +1513,7 @@ devices-session-people = { $count ->
 settings-discord-preview = Discord 状态预览
 
 # the Discord status when the track is left out of it
+settings-group-jellyfin-remote = Jellyfin 远程控制
 settings-group-sessions = 会话
 settings-sessions-button = 显示「会话」按钮
 settings-sessions-official = 使用官方的 Sonora 会话服务器
@@ -1555,6 +1602,10 @@ keybinds-reset-all-button = 重置
 keybind-toggle-playback = 播放或暂停
 keybind-song-previous = 上一首
 keybind-song-next = 下一首
+keybind-volume-up = 增大音量
+keybind-volume-down = 减小音量
+keybind-seek-back = 快退
+keybind-seek-forward = 快进
 keybind-toggle-shuffle = 随机播放
 keybind-toggle-repeat = 循环播放
 keybind-navigate-back = 返回
@@ -1615,7 +1666,6 @@ soloist-continue = 继续
 soloist-pair-step-open = 在同一网络中的手机或电脑上打开 Spotify
 soloist-pair-step-play = 在该设备上播放任意歌曲
 soloist-pair-step-pick = 打开设备列表并选择 { $device }
-soloist-pair-waiting = 正在等待 Spotify…
 soloist-pair-firewall = 找不到设备？请确保这台电脑的防火墙允许 UDP 5353 和 TCP { $port } 端口的连接。
 soloist-back = 返回
 soloist-problem-download = 无法下载 Soloist

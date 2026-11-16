@@ -99,6 +99,10 @@ yay -S sonora
 flatpak install --user https://sonorahq.github.io/sonora/sonora.flatpakref
 ```
 
+#### Snap
+
+Install from the [Snap Store](https://snapcraft.io/sonora): `sudo snap install sonora`.
+
 #### AppImage
 
 Download from the [latest release](https://github.com/sonorahq/sonora/releases/latest), make it executable and run
@@ -131,7 +135,22 @@ nix.settings = {
 
 Building from source on macOS needs Xcode added to the Nix store, because the shaders compile with Apple's Metal compiler.
 
-Configuration with Home Manager is provided by the module under `programs.sonora`.
+Configuration with NixOS or Home Manager is provided by the module under `programs.sonora`.
+
+```nix
+{ inputs, ... }: {
+  imports = [ inputs.sonora.nixosModules.default ]; # NixOS
+  # imports = [ inputs.sonora.homeModules.default ]; # Home Manager
+  programs.sonora = {
+    enable = true;
+    settings = {
+      provider = "youtube";
+      gapless = true;
+      appearance.theme = "dark";
+    };
+  };
+}
+```
 
 ### Windows
 
@@ -166,21 +185,24 @@ Discord is the primary one, but we do have a Matrix bridge.
 
 | Language | Translated | Coverage |
 | --- | --- | --- |
-| English (`en-US`) | 1335/1335 | 100% |
-| Deutsch (`de`) | 1108/1335 | 83% |
-| Español (`es`) | 1106/1335 | 83% |
-| Français (`fr`) | 1107/1335 | 83% |
-| Italiano (`it`) | 1106/1335 | 83% |
-| Bahasa Indonesia (`id`) | 1106/1335 | 83% |
-| 日本語 (`ja`) | 1106/1335 | 83% |
-| Русский (`ru`) | 1207/1335 | 90% |
-| Українська (`uk`) | 1108/1335 | 83% |
-| Polski (`pl`) | 1108/1335 | 83% |
-| Čeština (`cs`) | 1106/1335 | 83% |
-| Português (Brasil) (`pt-BR`) | 1106/1335 | 83% |
-| 简体中文 (`zh-CN`) | 1335/1335 | 100% |
-| Türkçe (`tr`) | 1106/1335 | 83% |
-| Shqip (`sq`) | 1106/1335 | 83% |
+| English (`en-US`) | 1382/1382 | 100% |
+| Deutsch (`de`) | 1106/1382 | 80% |
+| Español (`es`) | 1104/1382 | 80% |
+| Français (`fr`) | 1105/1382 | 80% |
+| Italiano (`it`) | 1104/1382 | 80% |
+| Bahasa Indonesia (`id`) | 1104/1382 | 80% |
+| 日本語 (`ja`) | 1104/1382 | 80% |
+| 한국어 (`ko`) | 1339/1382 | 97% |
+| Русский (`ru`) | 1214/1382 | 88% |
+| Українська (`uk`) | 1106/1382 | 80% |
+| Polski (`pl`) | 1106/1382 | 80% |
+| Čeština (`cs`) | 1104/1382 | 80% |
+| Português (Brasil) (`pt-BR`) | 1104/1382 | 80% |
+| Português (Portugal) (`pt-PT`) | 1104/1382 | 80% |
+| 简体中文 (`zh-CN`) | 1382/1382 | 100% |
+| Türkçe (`tr`) | 1104/1382 | 80% |
+| Shqip (`sq`) | 1104/1382 | 80% |
+| Tiếng Việt (`vi`) | 1339/1382 | 97% |
 
 <!-- i18n:end -->
 

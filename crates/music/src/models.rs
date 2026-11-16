@@ -269,6 +269,37 @@ pub struct GenreSection {
     pub items: Vec<GenreItem>,
 }
 
+/// What one search found for every kind it looks for. Each kind keeps its own outcome, so a
+/// part the provider refused leaves the others standing.
+#[derive(Debug)]
+pub struct Found {
+    pub tracks: anyhow::Result<Vec<Track>>,
+    pub albums: anyhow::Result<Vec<Album>>,
+    pub playlists: anyhow::Result<Vec<Playlist>>,
+    pub artists: anyhow::Result<Vec<SavedArtist>>,
+}
+
+impl Found {
+    /// Every kind failed with `error`, for a provider that asks for all of them in one request.
+    pub fn failed(error: anyhow::Error) -> Self {
+        let again = || anyhow::anyhow!("{error:#}");
+        Self {
+            albums: Err(again()),
+            playlists: Err(again()),
+            artists: Err(again()),
+            tracks: Err(error),
+        }
+    }
+
+    /// Whether no kind came back at all.
+    pub fn is_failed(&self) -> bool {
+        self.tracks.is_err()
+            && self.albums.is_err()
+            && self.playlists.is_err()
+            && self.artists.is_err()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct HomeFeed {
     /// What the user has been playing lately, in every shape the provider lists it: songs and
@@ -341,6 +372,25 @@ pub struct PlaylistDetail {
     pub continuation: Option<String>,
 }
 
+/// Which end of a list holds the songs added last, for a list that comes in the order its songs
+/// were added but has no date on each. A Date added sort on such a list follows its order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Arrival {
+    OldestFirst,
+    NewestFirst,
+}
+
+impl Arrival {
+    /// Puts a row the listener just added where the provider will list it: last in an
+    /// oldest-first list, first in a newest-first one.
+    pub fn admit<T>(self, rows: &mut Vec<T>, row: T) {
+        match self {
+            Self::OldestFirst => rows.push(row),
+            Self::NewestFirst => rows.insert(0, row),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ArtistProfile {
     pub name: String,
@@ -366,6 +416,9 @@ pub struct Artist {
     pub banner: Option<String>,
     pub biography: Option<String>,
     pub monthly_listeners: Option<u64>,
+    /// How many accounts follow the artist, when the provider counts followers apart from
+    /// listeners. Left empty rather than zero when the provider does not say.
+    pub followers: Option<u64>,
     pub top_tracks: Vec<Track>,
     pub albums: Vec<Album>,
 }
