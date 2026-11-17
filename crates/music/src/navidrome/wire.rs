@@ -24,6 +24,8 @@ pub struct Song {
     pub duration: f64,
     pub play_count: u64,
     pub created_at: String,
+    /// When this account liked the song, separate from when the file entered the catalog.
+    pub starred_at: Option<String>,
     /// The lyrics the file carries, as the server parsed them out of its own tags.
     pub lyrics: String,
     pub explicit_status: String,
@@ -59,6 +61,8 @@ pub struct Album {
     pub image_hash: String,
     pub large_image_url: String,
     pub created_at: String,
+    /// When this account liked the album, separate from when its files entered the catalog.
+    pub starred_at: Option<String>,
 }
 
 /// An artist, as `/api/artist` hands one over. The list and the detail route carry the same
@@ -72,6 +76,8 @@ pub struct Artist {
     pub biography: String,
     pub large_image_url: String,
     pub created_at: Option<String>,
+    /// When this account liked the artist, separate from when the catalog first listed them.
+    pub starred_at: Option<String>,
 }
 
 /// A playlist, as `/api/playlist` hands one over. The tracks are not among these fields: the
@@ -86,6 +92,8 @@ pub struct Playlist {
     pub public: bool,
     pub song_count: u32,
     pub updated_at: Option<String>,
+    /// Any rules make the tracks read-only, including rules this client cannot edit yet.
+    pub rules: Option<serde_json::Value>,
 }
 
 /// One row of a playlist: the song, under the id the playlist gives its own place in itself.
@@ -238,13 +246,14 @@ pub fn playlist(source: &Playlist, cover: Option<String>, username: &str) -> mod
         name: source.name.clone(),
         owner: source.owner_name.clone(),
         owner_id: source.owner_id.clone(),
-        owned: !source.owner_name.is_empty() && source.owner_name == username,
+        owned: !source.owner_name.is_empty() && source.owner_name.eq_ignore_ascii_case(username),
         collaborative: false,
         blend: false,
         public: source.public,
         cover,
         track_count: source.song_count,
         modified_at: moment(source.updated_at.as_deref()),
+        read_only: source.rules.is_some(),
     }
 }
 
@@ -446,7 +455,7 @@ pub fn length(seconds: f64) -> Duration {
 /// An ISO-8601 stamp as seconds since the epoch, which is what a library column sorts and
 /// draws. The server writes them in whatever offset it keeps, and one it cannot read is
 /// nothing rather than a guess.
-fn moment(stamp: Option<&str>) -> Option<i64> {
+pub(crate) fn moment(stamp: Option<&str>) -> Option<i64> {
     let at = stamp?.parse::<jiff::Timestamp>().ok()?;
     Some(at.as_second())
 }

@@ -19,7 +19,7 @@ use crate::cover::{self, CoverLimits};
 use crate::engine::Loudness;
 use crate::escape;
 use crate::order;
-use crate::smart::SmartPlaylistUpdate;
+use crate::smart::{NAVIDROME_SMART, SmartPlaylistUpdate, navidrome_version as release};
 use crate::subsonic::auth::Signature;
 use crate::subsonic::wire;
 use crate::{
@@ -51,12 +51,6 @@ const API_VERSION: &str = "1.16.1";
 const CLIENT_NAME: &str = "sonora";
 /// The first Navidrome that takes a playlist picture through its own API.
 const NAVIDROME_COVERS: (u32, u32) = (0, 61);
-/// The first Navidrome declared to take smart playlists through its own API. The create,
-/// edit and read contract is the same across the 0.64 releases (their playlist REST adapters
-/// differ only in delete error mapping, which these calls do not use), and the live exercise
-/// ran against 0.64.2. An earlier Navidrome may answer them, but only a version whose
-/// contract was verified is declared.
-const NAVIDROME_SMART: (u32, u32) = (0, 64);
 /// Navidrome takes up to 10 MB by default, and shows a cover at most this large.
 const PLAYLIST_COVER: CoverLimits = CoverLimits {
     side: 1500,
@@ -312,7 +306,13 @@ impl SubsonicClient {
             .navidrome
             .get_or_init(|| async {
                 let url = format!("{}/rest/ping?{}", self.server, self.signed);
-                let answer: serde_json::Value = match self.http.get(url).send().await {
+                let answer: serde_json::Value = match self
+                    .http
+                    .get(url)
+                    .send()
+                    .await
+                    .map_err(reqwest::Error::without_url)
+                {
                     Ok(response) => response.json().await.unwrap_or_default(),
                     Err(error) => {
                         log::info!("subsonic: cannot ask what the server is: {error:#}");
@@ -454,31 +454,7 @@ impl SubsonicClient {
     /// The playlist as Navidrome's own API answers it: its rules, its owner and whether a
     /// file sync can overwrite an edit. A `rules` of null marks an ordinary playlist.
     fn read_smart_playlist(&self, value: &serde_json::Value) -> Result<SmartPlaylist> {
-        let rules =
-            match value["rules"].is_null() {
-                true => None,
-                false => Some(SmartRules::from_wire(&value["rules"]).map_err(|problem| {
-                    anyhow::anyhow!("navidrome's rules do not read: {problem}")
-                })?),
-            };
-        let owner = value["ownerName"].as_str().unwrap_or_default().to_owned();
-        Ok(SmartPlaylist {
-            id: value["id"]
-                .as_str()
-                .context("navidrome's playlist answer names no id")?
-                .to_owned(),
-            name: value["name"].as_str().unwrap_or_default().to_owned(),
-            comment: value["comment"].as_str().unwrap_or_default().to_owned(),
-            public: value["public"].as_bool().unwrap_or(false),
-            // Navidrome signs an account in under any spelling of its name, so ownership
-            // compares without case.
-            owned: !owner.is_empty() && owner.eq_ignore_ascii_case(&self.username),
-            rules,
-            synced: value["sync"].as_bool().unwrap_or(false)
-                && value["path"].as_str().is_some_and(|path| !path.is_empty()),
-            track_count: value["songCount"].as_u64().unwrap_or(0) as u32,
-            owner,
-        })
+        SmartPlaylist::from_wire(value, &self.username)
     }
 
     /// Whether the server lists the OpenSubsonic extension `name`, asked once per client. A
@@ -1129,10 +1105,7 @@ impl MusicApi for SubsonicClient {
     /// Creates a smart playlist from rules, going through Navidrome's own API since the
     /// Subsonic create call carries none. The server owns the new playlist's id and owner.
     async fn create_smart_playlist(&self, name: &str, rules: &SmartRules) -> Result<String> {
-        let problems = rules.problems();
-        if !problems.is_empty() {
-            anyhow::bail!("the rules are not ready to save: {}", describe(&problems));
-        }
+        rules.validate()?;
         let response = self
             .navidrome_send(
                 reqwest::Method::POST,
@@ -1164,15 +1137,7 @@ impl MusicApi for SubsonicClient {
         playlist_id: &str,
         update: SmartPlaylistUpdate,
     ) -> Result<SmartPlaylist> {
-        if update.is_empty() {
-            anyhow::bail!("the edit changes nothing");
-        }
-        if let Some(rules) = &update.rules {
-            let problems = rules.problems();
-            if !problems.is_empty() {
-                anyhow::bail!("the rules are not ready to save: {}", describe(&problems));
-            }
-        }
+        update.validate()?;
         let response = self
             .navidrome_send(
                 reqwest::Method::PUT,
@@ -1952,15 +1917,6 @@ fn source_genre(source: SourceGenre) -> Genre {
     }
 }
 
-/// The rule problems of one save, joined for an error message.
-fn describe(problems: &[crate::RuleProblem]) -> String {
-    problems
-        .iter()
-        .map(|problem| format!("{}: {}", problem.path, problem.problem))
-        .collect::<Vec<_>>()
-        .join("; ")
-}
-
 /// The artists a genre's albums and songs credit, albums first, in the order they are first
 /// named. Subsonic has no artists-of-a-genre endpoint, so the shelf derives membership from the
 /// genre's complete album and song lists; it is not guaranteed to hold every artist the server
@@ -1988,14 +1944,6 @@ fn genre_artists(albums: &[Album], songs: &[Track]) -> Vec<SavedArtist> {
         });
     }
     artists
-}
-
-/// The major and minor numbers of a version such as `0.61.0` or `0.61.0 (a1b2c3)`.
-fn release(version: &str) -> Option<(u32, u32)> {
-    let mut parts = version.split(|letter: char| !letter.is_ascii_digit());
-    let major = parts.next()?.parse().ok()?;
-    let minor = parts.next()?.parse().ok()?;
-    Some((major, minor))
 }
 
 /// Drops the request url from a transport error. Every Subsonic url carries the user name and a

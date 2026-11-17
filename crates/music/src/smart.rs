@@ -8,7 +8,15 @@
 //! has no editor row for: an unknown expression parses into [`Rule::Unknown`] and writes
 //! back verbatim, so editing the rest of a tree never discards part of it.
 
+use anyhow::Context as _;
 use serde_json::{Map, Number, Value};
+
+/// The first Navidrome declared to take smart playlists through its own API. The create,
+/// edit and read contract is the same across the 0.64 releases (their playlist REST adapters
+/// differ only in delete error mapping, which these calls do not use), and the live exercise
+/// ran against 0.64.2. An earlier Navidrome may answer them, but only a version whose
+/// contract was verified is declared.
+pub(crate) const NAVIDROME_SMART: (u32, u32) = (0, 64);
 
 /// What one playlist's rules look like on the provider, enough for an editor to open it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -32,6 +40,35 @@ pub struct SmartPlaylist {
     pub track_count: u32,
 }
 
+impl SmartPlaylist {
+    /// Reads the native playlist answer shared by the Navidrome and Subsonic providers.
+    /// A null rules value marks an ordinary playlist, and ownership ignores name case.
+    pub(crate) fn from_wire(value: &Value, username: &str) -> anyhow::Result<Self> {
+        let rules = match value["rules"].is_null() {
+            true => None,
+            false => Some(SmartRules::from_wire(&value["rules"]).map_err(|problem| {
+                anyhow::anyhow!("navidrome's rules do not read: {problem}")
+            })?),
+        };
+        let owner = value["ownerName"].as_str().unwrap_or_default().to_owned();
+        Ok(Self {
+            id: value["id"]
+                .as_str()
+                .context("navidrome's playlist answer names no id")?
+                .to_owned(),
+            name: value["name"].as_str().unwrap_or_default().to_owned(),
+            comment: value["comment"].as_str().unwrap_or_default().to_owned(),
+            public: value["public"].as_bool().unwrap_or(false),
+            owned: !owner.is_empty() && owner.eq_ignore_ascii_case(username),
+            rules,
+            synced: value["sync"].as_bool().unwrap_or(false)
+                && value["path"].as_str().is_some_and(|path| !path.is_empty()),
+            track_count: value["songCount"].as_u64().unwrap_or(0) as u32,
+            owner,
+        })
+    }
+}
+
 /// The fields of a smart playlist a save changes. Only the `Some` fields go to the
 /// provider, which leaves every field the request does not name untouched.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -49,6 +86,17 @@ impl SmartPlaylistUpdate {
             && self.comment.is_none()
             && self.public.is_none()
             && self.rules.is_none()
+    }
+
+    /// Refuses an empty edit or invalid rules before either provider sends a request.
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
+        if self.is_empty() {
+            anyhow::bail!("the edit changes nothing");
+        }
+        if let Some(rules) = &self.rules {
+            rules.validate()?;
+        }
+        Ok(())
     }
 
     /// The request body carrying exactly the fields set on the update.
@@ -233,6 +281,20 @@ impl SmartRules {
             });
         }
         problems
+    }
+
+    /// Refuses rules the server cannot evaluate before a provider signs in or saves them.
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
+        let problems = self.problems();
+        if problems.is_empty() {
+            return Ok(());
+        }
+        let description = problems
+            .iter()
+            .map(|problem| format!("{}: {}", problem.path, problem.problem))
+            .collect::<Vec<_>>()
+            .join("; ");
+        anyhow::bail!("the rules are not ready to save: {description}")
     }
 }
 
@@ -765,6 +827,14 @@ fn rules_from_wire(value: &Value) -> Result<Vec<Rule>, String> {
         }
     }
     Ok(rules)
+}
+
+/// Reads the major and minor server release, ignoring the patch and any suffix.
+pub(crate) fn navidrome_version(version: &str) -> Option<(u32, u32)> {
+    let mut parts = version.split(|letter: char| !letter.is_ascii_digit());
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    Some((major, minor))
 }
 
 #[cfg(test)]
