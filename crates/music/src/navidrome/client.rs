@@ -691,12 +691,14 @@ impl MusicApi for NavidromeClient {
 
     async fn saved_tracks_paged(&self) -> Result<Pages<Track>> {
         let query = "/api/song?starred=true&_sort=starredAt&_order=DESC";
-        Ok(self.paged(LIBRARY_PAGE, query, |client, source: wire::Song| {
-            let liked = wire::moment(source.starred_at.as_deref());
-            let mut track = client.song(source);
-            track.added_at = liked.or(track.added_at);
-            track
-        }))
+        Ok(
+            self.paged(LIBRARY_PAGE, query, |client, source: wire::Song| {
+                let liked = wire::moment(source.starred_at.as_deref());
+                let mut track = client.song(source);
+                track.added_at = liked.or(track.added_at);
+                track
+            }),
+        )
     }
 
     async fn all_tracks(&self) -> Result<Vec<Track>> {
@@ -898,12 +900,14 @@ impl MusicApi for NavidromeClient {
 
     async fn saved_albums_paged(&self) -> Result<Pages<Album>> {
         let query = "/api/album?starred=true&_sort=starredAt&_order=DESC";
-        Ok(self.paged(LIBRARY_PAGE, query, |client, source: wire::Album| {
-            let liked = wire::moment(source.starred_at.as_deref());
-            let mut album = client.album_of(source);
-            album.added_at = liked.or(album.added_at);
-            album
-        }))
+        Ok(
+            self.paged(LIBRARY_PAGE, query, |client, source: wire::Album| {
+                let liked = wire::moment(source.starred_at.as_deref());
+                let mut album = client.album_of(source);
+                album.added_at = liked.or(album.added_at);
+                album
+            }),
+        )
     }
 
     async fn all_albums(&self) -> Result<Vec<Album>> {
@@ -928,12 +932,14 @@ impl MusicApi for NavidromeClient {
 
     async fn saved_artists_paged(&self) -> Result<Pages<SavedArtist>> {
         let query = "/api/artist?starred=true&_sort=starredAt&_order=DESC";
-        Ok(self.paged(LIBRARY_PAGE, query, |client, source: wire::Artist| {
-            let liked = wire::moment(source.starred_at.as_deref());
-            let mut artist = client.artist_of(source);
-            artist.added_at = liked.or(artist.added_at);
-            artist
-        }))
+        Ok(
+            self.paged(LIBRARY_PAGE, query, |client, source: wire::Artist| {
+                let liked = wire::moment(source.starred_at.as_deref());
+                let mut artist = client.artist_of(source);
+                artist.added_at = liked.or(artist.added_at);
+                artist
+            }),
+        )
     }
 
     async fn all_artists(&self) -> Result<Vec<SavedArtist>> {

@@ -44,12 +44,13 @@ impl SmartPlaylist {
     /// Reads the native playlist answer shared by the Navidrome and Subsonic providers.
     /// A null rules value marks an ordinary playlist, and ownership ignores name case.
     pub(crate) fn from_wire(value: &Value, username: &str) -> anyhow::Result<Self> {
-        let rules = match value["rules"].is_null() {
-            true => None,
-            false => Some(SmartRules::from_wire(&value["rules"]).map_err(|problem| {
-                anyhow::anyhow!("navidrome's rules do not read: {problem}")
-            })?),
-        };
+        let rules =
+            match value["rules"].is_null() {
+                true => None,
+                false => Some(SmartRules::from_wire(&value["rules"]).map_err(|problem| {
+                    anyhow::anyhow!("navidrome's rules do not read: {problem}")
+                })?),
+            };
         let owner = value["ownerName"].as_str().unwrap_or_default().to_owned();
         Ok(Self {
             id: value["id"]
