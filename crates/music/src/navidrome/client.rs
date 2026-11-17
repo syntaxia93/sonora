@@ -12,10 +12,12 @@ use crate::engine::Loudness;
 use crate::escape;
 use crate::navidrome::auth;
 use crate::navidrome::wire;
+use crate::smart::{NAVIDROME_SMART, navidrome_version};
 use crate::{
     Album, AlbumCatalogue, AlbumDetail, Artist, ArtistProfile, Genre, GenreDetail, GenreItem,
     GenreSection, HomeFeed, Lyrics, MediaKind, MusicApi, Page, Pages, Playlist, PlaylistDetail,
-    Report, SUGGESTIONS, SavedArtist, Track, UserProfile, distinct_covers,
+    Report, SUGGESTIONS, SavedArtist, SmartPlaylist, SmartPlaylistUpdate, SmartRules, Track,
+    UserProfile, distinct_covers,
 };
 
 /// How many artists a page asks for pictures of at once.
@@ -82,6 +84,11 @@ impl NavidromeClient {
         }
     }
 
+    /// Reuses the playback connection pool when fetching a track's metadata suffix.
+    pub(crate) fn http(&self) -> &reqwest::Client {
+        &self.inner.http
+    }
+
     /// What sign-in has left so far, for the caller that stores it.
     pub fn session(&self) -> auth::Session {
         let Ok(session) = self.inner.session.read() else {
@@ -126,6 +133,33 @@ impl NavidromeClient {
             *sign_in = session;
         }
         Ok(())
+    }
+
+    /// Uses the same verified server versions as the Subsonic provider before showing rules.
+    pub async fn takes_smart_playlists(&self) -> bool {
+        let Some(url) = self.rest("ping") else {
+            return false;
+        };
+        let answer: Value = match self
+            .inner
+            .http
+            .get(url)
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)
+        {
+            Ok(response) => response.json().await.unwrap_or_default(),
+            Err(error) => {
+                log::info!("navidrome: cannot ask what the server is: {error:#}");
+                return false;
+            }
+        };
+        let response = &answer["subsonic-response"];
+        response["type"].as_str() == Some("navidrome")
+            && response["serverVersion"]
+                .as_str()
+                .and_then(navidrome_version)
+                .is_some_and(|version| version >= NAVIDROME_SMART)
     }
 
     /// A `rest` route with the account and the signature already on it. Those routes take no
@@ -657,7 +691,14 @@ impl MusicApi for NavidromeClient {
 
     async fn saved_tracks_paged(&self) -> Result<Pages<Track>> {
         let query = "/api/song?starred=true&_sort=starredAt&_order=DESC";
-        Ok(self.paged(LIBRARY_PAGE, query, Self::song))
+        Ok(
+            self.paged(LIBRARY_PAGE, query, |client, source: wire::Song| {
+                let liked = wire::moment(source.starred_at.as_deref());
+                let mut track = client.song(source);
+                track.added_at = liked.or(track.added_at);
+                track
+            }),
+        )
     }
 
     async fn all_tracks(&self) -> Result<Vec<Track>> {
@@ -749,6 +790,45 @@ impl MusicApi for NavidromeClient {
         Ok(made.id)
     }
 
+    /// Reads the same rule model as Subsonic through the native client's existing session.
+    async fn smart_playlist(&self, playlist_id: &str) -> Result<SmartPlaylist> {
+        let path = format!("/api/playlist/{}", escape::component(playlist_id));
+        let value: Value = self.item(&path).await?;
+        SmartPlaylist::from_wire(&value, &self.inner.username)
+    }
+
+    /// Creates rules through the native session, preserving expressions the editor cannot show.
+    async fn create_smart_playlist(&self, name: &str, rules: &SmartRules) -> Result<String> {
+        rules.validate()?;
+        let body = serde_json::json!({ "name": name, "rules": rules.to_wire() });
+        let answer = self
+            .request(reqwest::Method::POST, "/api/playlist", Some(&body))
+            .await
+            .context("cannot create the smart playlist")?;
+        let value: Value = self.read(answer).await?;
+        value["id"]
+            .as_str()
+            .map(str::to_owned)
+            .context("navidrome answered no id for the new playlist")
+    }
+
+    /// Sends only changed fields, so unedited rules and file sync settings remain on the server.
+    async fn update_smart_playlist(
+        &self,
+        playlist_id: &str,
+        update: SmartPlaylistUpdate,
+    ) -> Result<SmartPlaylist> {
+        update.validate()?;
+        let path = format!("/api/playlist/{}", escape::component(playlist_id));
+        let body = update.to_wire();
+        let answer = self
+            .request(reqwest::Method::PUT, &path, Some(&body))
+            .await
+            .context("cannot save the smart playlist")?;
+        let value: Value = self.read(answer).await?;
+        SmartPlaylist::from_wire(&value, &self.inner.username)
+    }
+
     async fn rename_playlist(&self, playlist_id: &str, name: &str) -> Result<()> {
         self.change_playlist(playlist_id, |playlist| {
             playlist["name"] = Value::from(name);
@@ -820,7 +900,14 @@ impl MusicApi for NavidromeClient {
 
     async fn saved_albums_paged(&self) -> Result<Pages<Album>> {
         let query = "/api/album?starred=true&_sort=starredAt&_order=DESC";
-        Ok(self.paged(LIBRARY_PAGE, query, Self::album_of))
+        Ok(
+            self.paged(LIBRARY_PAGE, query, |client, source: wire::Album| {
+                let liked = wire::moment(source.starred_at.as_deref());
+                let mut album = client.album_of(source);
+                album.added_at = liked.or(album.added_at);
+                album
+            }),
+        )
     }
 
     async fn all_albums(&self) -> Result<Vec<Album>> {
@@ -845,7 +932,14 @@ impl MusicApi for NavidromeClient {
 
     async fn saved_artists_paged(&self) -> Result<Pages<SavedArtist>> {
         let query = "/api/artist?starred=true&_sort=starredAt&_order=DESC";
-        Ok(self.paged(LIBRARY_PAGE, query, Self::artist_of))
+        Ok(
+            self.paged(LIBRARY_PAGE, query, |client, source: wire::Artist| {
+                let liked = wire::moment(source.starred_at.as_deref());
+                let mut artist = client.artist_of(source);
+                artist.added_at = liked.or(artist.added_at);
+                artist
+            }),
+        )
     }
 
     async fn all_artists(&self) -> Result<Vec<SavedArtist>> {

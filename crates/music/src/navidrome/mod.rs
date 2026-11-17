@@ -48,6 +48,7 @@ impl NavidromeProvider {
             .profile()
             .await
             .context("cannot reach the navidrome server")?;
+        let smart_playlists = client.takes_smart_playlists().await;
         auth::store(&auth::Credentials {
             server,
             username,
@@ -60,7 +61,10 @@ impl NavidromeProvider {
             playback: Arc::new(Factory::new(client)),
             shape: Shape::Catalog(Catalog::Fixed),
             authenticated: true,
-            capabilities: CAPABILITIES,
+            capabilities: Capabilities {
+                smart_playlists,
+                ..CAPABILITIES
+            },
         })
     }
 
@@ -76,6 +80,7 @@ impl NavidromeProvider {
         );
         match client.profile().await {
             Ok(profile) => {
+                let smart_playlists = client.takes_smart_playlists().await;
                 let session = client.session();
                 if session != remembered.session {
                     remembered.session = session;
@@ -89,7 +94,10 @@ impl NavidromeProvider {
                     playback: Arc::new(Factory::new(client)),
                     shape: Shape::Catalog(Catalog::Fixed),
                     authenticated: true,
-                    capabilities: CAPABILITIES,
+                    capabilities: Capabilities {
+                        smart_playlists,
+                        ..CAPABILITIES
+                    },
                 }))
             }
             Err(error) if crate::trouble::offline(&format!("{error:#}")) => Err(error),
