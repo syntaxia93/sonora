@@ -1333,7 +1333,7 @@ impl Render for ArtistView {
         }
         if self.mode == Mode::List {
             self.table.claim(cx);
-            let mut viewport = page::viewport(&scroll, inset, window);
+            let mut viewport = page::viewport(&scroll, inset, window, cx);
             // `viewport` measures from the block under the hero. This page puts the biography,
             // and the heading list mode adds, between that block and the table, so the head has
             // to wait for them as well rather than pinning while they are still on screen.
