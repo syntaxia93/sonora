@@ -17,6 +17,7 @@ use ui::{
 use crate::chrome::{
     AppNotice, Chrome, PlayerBar, SidebarLeft, SidebarRight, SwipeCue, TitleBarOptions, sheet_frame,
 };
+use crate::shared::adaptive::workspace_background;
 use crate::shared::menus::CardMenu;
 use crate::shells::Shell;
 
@@ -341,7 +342,8 @@ impl Render for Workspace {
             false => hidden,
         };
         let theme = *cx.theme();
-        let backdrop = theme.background;
+        let immersive = self.settings.read(cx).immersive();
+        let backdrop = workspace_background(&theme, cx);
         // That price has to be paid for real, not merely accepted: opacity is baked
         // into a primitive as it is painted, and a cached view replays its primitives
         // until something notifies it, so a fading page that stayed cached would be
@@ -410,7 +412,7 @@ impl Render for Workspace {
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .when(!theme.transparent, |this| this.bg(theme.sidebar))
+                    .when(!theme.transparent && !immersive, |this| this.bg(theme.sidebar))
                     .when(!overlay, |this| this.child(sidebar))
                     .child(
                         div()
@@ -422,7 +424,9 @@ impl Render for Workspace {
                             .min_h_0()
                             .ml(overlay_width)
                             // The page lies on the chrome as a sheet.
-                            .when(!theme.transparent, |this| this.bg(theme.background))
+                            .when(!theme.transparent && !immersive, |this| {
+                                this.bg(theme.background)
+                            })
                             .when(overlay, |this| this.overflow_hidden())
                             .when(covered, |this| this.hidden())
                             // A two-finger swipe across the page steps through its history,
@@ -480,7 +484,7 @@ impl Render for Workspace {
                                 this.child(island_fade(bar_height, window, cx))
                             })
                             .child(self.swipe_cue.clone())
-                            .child(sheet_frame(corners, edges, cx)),
+                            .when(!immersive, |this| this.child(sheet_frame(corners, edges, cx))),
                     )
                     .child(sidebar_right)
                     .when(overlay, |this| this.child(self.sidebar.clone())),
@@ -544,7 +548,7 @@ fn slid(
 /// it rather than through it. The part as tall as the island's bar takes no hover or click, so
 /// nothing lights up around the pill, though the page still scrolls there.
 fn island_fade(bar: Pixels, window: &Window, cx: &App) -> Div {
-    let background = cx.theme().background;
+    let background = workspace_background(cx.theme(), cx);
     let band = bar * ISLAND_FADE;
     div()
         .absolute()

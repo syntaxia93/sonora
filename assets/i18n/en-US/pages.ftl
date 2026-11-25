@@ -116,6 +116,12 @@ home-most-played = Most played
 home-favorite-albums = Favorite albums
 home-artists = Artists
 home-collection-albums = Albums from your collection
+home-for-you = For you
+home-from-your-library = From your library
+home-most-played-albums = Most played albums
+home-top-playlists = Top playlists
+home-top-albums = Top albums
+home-top-songs = Top songs
 
 # powerbar (quick search)
 powerbar-title = Quick search

@@ -229,7 +229,7 @@ locally, and every check runs on GitHub Actions.
   `immersive` getter and setter in their own `impl AppSettings` block ahead of the tests rather
   than inside the file's big impl.
 - **Release versions follow the synced upstream release, starting with 0.48.0.** Keep the
-  `Cargo.toml` workspace version, all fourteen workspace entries in `Cargo.lock`, and the
+  `Cargo.toml` workspace version, all workspace entries in `Cargo.lock`, and the
   `windows.yml` version input identical. The release tag stays `windows-X.Y.Z`, and its title
   is `X.Y.Z`. The former independent 0.44.x sequence is retired.
 - **A new `SessionEvent` variant lands in state's `match` arms,** one per owner; the fork's own

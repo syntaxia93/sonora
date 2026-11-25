@@ -29,6 +29,13 @@ common-not-now = 以后再说
 common-not-connected = 未连接
 common-sonora = Sonora
 common-more-count = +{ $count }
+option-variants = { $name } 的变体
+table-sorted-ascending = 已按升序排序
+table-sorted-descending = 已按降序排序
+range-from = 从
+range-to = 到
+rail-back = 向左翻
+rail-forward = 向右翻
 number-group = { "," }
 
 # units
@@ -41,16 +48,18 @@ unit-gb = { $value } GB
 unit-mb = { $value } MB
 unit-fps = { $value } FPS
 unit-px = { $value } px
-runtime-seconds = { $seconds } 秒
-runtime-minutes = { $minutes } 分 { $seconds } 秒
-runtime-hours = { $hours } 小时 { $minutes } 分
+runtime-seconds = { $seconds }秒
+runtime-minutes = { $minutes }分{ $seconds }秒
+runtime-hours = { $hours }小时{ $minutes }分
 
 # navigation
-nav-history = 历史记录
+nav-history = 最近播放
 nav-home = 首页
 nav-search = 搜索
 nav-library = 你的音乐库
+sidebar-library = 音乐库
 nav-settings = 设置
+account-manage = 管理账户
 nav-songs = 歌曲
 nav-albums = 专辑
 nav-playlists = 播放列表
@@ -58,6 +67,7 @@ nav-artists = 歌手
 nav-local = 本地音乐
 nav-back = 返回
 nav-forward = 前进
+nav-trail = 导航历史
 nav-sidebar = 切换侧边栏
 nav-sidebar-right = 显示或隐藏歌词和播放队列
 nav-pinned = 已固定
@@ -77,13 +87,23 @@ library-no-catalog-albums = 未找到专辑
 library-no-catalog-artists = 未找到歌手
 library-no-matches = 无匹配结果
 library-not-loaded = 音乐库加载失败
-library-scanning = 正在浏览你的文件夹…
-library-scanning-progress = 正在读取你的音乐…{ $read } / { $found }
+library-scanning = 正在查找你的文件夹…
+library-scanning-progress = 正在读取你的音乐… { $read }/{ $found }
 library-part-not-loaded = 音乐库的这部分加载失败
 library-local-unconfigured = 配置本地音乐库
 
 # app menu
 app-refresh = 刷新
+app-dev-badge = 开发版
+app-dev-build = 开发版本
+downloads-active = 正在下载
+downloads-left = { $count ->
+    [one] 还剩 { $count } 首
+   *[other] 还剩 { $count } 首
+    }
+downloads-eta = 约剩 { $minutes } 分钟
+downloads-cancel = 取消下载
+downloads-cancel-all = 取消全部下载
 app-sign-out = 退出登录
 app-quit = 退出
 app-settings = 设置…
@@ -96,6 +116,8 @@ app-window = 窗口
 app-close-window = 关闭窗口
 app-minimize = 最小化
 app-zoom = 缩放
+window-maximize = 最大化
+window-restore = 还原
 
 # tray menu
 tray-show = 显示 Sonora
@@ -110,6 +132,7 @@ column-artist = 歌手
 column-album = 专辑
 column-genre = 流派
 column-date-added = 添加日期
+column-date-liked = 收藏日期
 column-added-by = 添加者
 column-modified = 修改时间
 column-length = 时长
@@ -131,10 +154,13 @@ filter-album = 筛选专辑歌曲
 filter-reset = 重置筛选
 filter-duration = 时长
 filter-year = 年份
+filter-tracks = 歌曲数
 filter-hide-explicit = 隐藏露骨内容
 filter-favorites = 仅收藏
 filter-downloaded = 已下载
 filter-owned = 由你拥有
+filter-local-only = 仅本地音乐
+filter-streaming-only = 仅在线音乐
 
 # view
 view-list = 列表
@@ -143,6 +169,7 @@ view-cards = 网格
 # toolbar
 tool-sort = 排序
 tool-filters = 筛选
+tool-account = 账户
 
 # release kinds
 release-album = 专辑

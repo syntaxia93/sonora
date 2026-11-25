@@ -25,6 +25,7 @@ use crate::chrome::{
 };
 use crate::screens::search::SearchView;
 use crate::screens::settings::SettingsHeader;
+use crate::shared::adaptive::workspace_background;
 use crate::shared::ambient::{self, Ambient};
 use crate::shared::confirm::Confirm;
 use crate::shared::playlist_editor::PlaylistEditor;
@@ -157,7 +158,7 @@ enum Focus {
 /// What a shell on its way out stands on, since neither shell paints a background of its own.
 enum Ground {
     /// The page colour of the theme it wore.
-    Page,
+    Page(gpui::Hsla),
     /// The ambient field fullscreen was drawn over.
     Field(Entity<Ambient>),
 }
@@ -1107,16 +1108,6 @@ impl Root {
 
 const UI_FONT: &str = "Inter";
 
-/// How dark the page tint reads in a dark theme, and how light in a light one.
-const PAGE_DARK_LIGHTNESS: f32 = 0.16;
-const PAGE_LIGHT_LIGHTNESS: f32 = 0.94;
-/// How much of the cover's saturation the page keeps, and the ceiling it may not pass: a page is
-/// a shade of the art, not the art itself.
-const PAGE_SATURATION: f32 = 0.5;
-const PAGE_SATURATION_MAX: f32 = 0.42;
-/// A pale page carries chroma further, so a light theme keeps less of it.
-const PAGE_LIGHT_SATURATION: f32 = 0.4;
-
 const SCRIPTS: [&str; 18] = [
     "Source Han Sans",
     "Noto Sans CJK JP",
@@ -1181,9 +1172,9 @@ fn parting(
     shell: impl IntoElement,
 ) -> impl IntoElement {
     let (page, field) = match ground {
-        Some(Ground::Page) => (true, None),
-        Some(Ground::Field(field)) => (false, Some(field)),
-        None => (false, None),
+        Some(Ground::Page(page)) => (Some(page), None),
+        Some(Ground::Field(field)) => (None, Some(field)),
+        None => (None, None),
     };
     Themed::new(
         *theme,
@@ -1193,8 +1184,8 @@ fn parting(
             .flex()
             .flex_col()
             .pt(bar)
-            .when(page, |this| {
-                this.bg(theme.background)
+            .when_some(page, |this, page| {
+                this.bg(page)
                     .when_some(radius, |this, radius| this.rounded(radius))
             })
             .text_color(theme.foreground)
@@ -1324,34 +1315,10 @@ impl Render for Root {
         // The ambient field covers the window whole and carries the window's own opacity, so
         // the page colour under it would only stack a second alpha beneath that and leave a
         // see-through fullscreen reading nearly solid.
-        let immersive = Sonora::global(cx).settings.read(cx).immersive();
         let ambient = matches!(self.view, RootView::Fullscreen) && ambient::shown(cx);
-        // The workspace takes its page colour from the playing art, the way Apple Music's does:
-        // the cover's own tint rather than a field of blobs, so the page is one deep shade.
-        let page = match immersive && matches!(self.view, RootView::Workspace) {
-            true => {
-                let cover = self
-                    .playback
-                    .read(cx)
-                    .track()
-                    .and_then(|track| track.cover.clone());
-                let tint = cover
-                    .and_then(|cover| ui::cover_palette(&cover, cx))
-                    .and_then(|palette| palette.primary);
-                tint.map(|tint| gpui::Hsla {
-                    h: tint.h,
-                    s: match theme.background.l < 0.5 {
-                        true => (tint.s * PAGE_SATURATION).min(PAGE_SATURATION_MAX),
-                        false => tint.s * PAGE_SATURATION * PAGE_LIGHT_SATURATION,
-                    },
-                    l: match theme.background.l < 0.5 {
-                        true => PAGE_DARK_LIGHTNESS,
-                        false => PAGE_LIGHT_LIGHTNESS,
-                    },
-                    a: theme.background.a,
-                })
-            }
-            false => None,
+        let page = match self.view {
+            RootView::Workspace => workspace_background(&theme, cx),
+            RootView::Fullscreen => theme.background,
         };
 
         // The shell enters the way a page enters the workspace. An opaque window fades it
@@ -1435,7 +1402,7 @@ impl Render for Root {
                     &parted,
                     bar,
                     radius,
-                    Some(Ground::Page),
+                    Some(Ground::Page(workspace_background(&parted, cx))),
                     self.shells.workspace.clone(),
                 ))
         });
@@ -1478,7 +1445,7 @@ impl Render for Root {
                         .left_0()
                         .right_0()
                         .bottom(PlayerBar::height(window, cx))
-                        .bg(theme.background)
+                        .bg(page)
                         .opacity(hidden),
                 )
             })
@@ -1527,10 +1494,7 @@ impl Render for Root {
             .when_some(radius, |this, radius| {
                 this.rounded(radius).overflow_hidden()
             })
-            .when(!ambient && !opening, |this| match page {
-                Some(page) => this.bg(page),
-                None => this.bg(theme.background),
-            })
+            .when(!ambient && !opening, |this| this.bg(page))
             .text_color(theme.foreground)
             .capture_any_mouse_down(|_, window, cx| {
                 if ui::cancel_middle_scroll(cx) {

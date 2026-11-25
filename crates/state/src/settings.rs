@@ -353,8 +353,9 @@ const DEFAULT_STARTUP: &str = "home";
 pub const SYSTEM_FONT: &str = "auto";
 /// Every lyrics source Sonora knows by the name its provider reports, in the order a fresh
 /// install prefers them.
-pub const LYRICS_SOURCES: [&str; 11] = [
+pub const LYRICS_SOURCES: [&str; 12] = [
     LOCAL,
+    "Navidrome",
     "Subsonic",
     "Jellyfin",
     "Plex",
@@ -472,6 +473,8 @@ struct Values {
     /// Set once Local has been added to a list saved before it existed, so a user who turns it
     /// off afterwards is not given it back.
     local_lyrics_offered: bool,
+    /// Set once Navidrome has been added to a list saved before its source was configurable.
+    navidrome_lyrics_offered: bool,
     /// Set once Subsonic has been added to a list saved before it existed, so a user who turns it
     /// off afterwards is not given it back.
     subsonic_lyrics_offered: bool,
@@ -778,13 +781,14 @@ impl Default for Values {
             subsonic_bitrate: None,
             stream_quality: Quality::default().id().to_owned(),
             local_lyrics_offered: false,
+            navidrome_lyrics_offered: false,
             subsonic_lyrics_offered: false,
             jellyfin_lyrics_offered: false,
             lyrics_enabled: true,
             plex_lyrics_offered: false,
             lyrics_provider_priority: lyrics_priority(&[]),
             // Kugou and NetEase, the last two, start switched off.
-            lyrics_providers: LYRICS_SOURCES[..9]
+            lyrics_providers: LYRICS_SOURCES[..10]
                 .iter()
                 .map(|name| name.to_string())
                 .collect(),
@@ -1067,6 +1071,7 @@ impl AppSettings {
             Some((Ok(values), bytes)) => (values.settled(), writable, Some(bytes), None),
             Some((Err(_), bytes)) if empty_settings(&bytes) => {
                 let values = Values {
+                    navidrome_lyrics_offered: true,
                     subsonic_lyrics_offered: true,
                     jellyfin_lyrics_offered: true,
                     plex_lyrics_offered: true,
@@ -1078,10 +1083,11 @@ impl AppSettings {
                 log::warn!("settings: cannot parse {}: {error}", path.display());
                 (Values::default().settled(), false, None, Some(error.line()))
             }
-            // The default provider list already has Subsonic, Jellyfin and Plex, so a fresh install
-            // marks them offered and a user who turns one off does not get it back on the next launch.
+            // The default provider list already has every server source, so a fresh install
+            // marks them offered and a user who turns one off does not get it back next launch.
             None => {
                 let values = Values {
+                    navidrome_lyrics_offered: true,
                     subsonic_lyrics_offered: true,
                     jellyfin_lyrics_offered: true,
                     plex_lyrics_offered: true,
@@ -3088,6 +3094,7 @@ fn empty_settings(bytes: &[u8]) -> bool {
 /// an existing user once.
 fn offer_new_lyrics(mut values: Values) -> Values {
     let sources = [
+        (&mut values.navidrome_lyrics_offered, "Navidrome"),
         (&mut values.subsonic_lyrics_offered, "Subsonic"),
         (&mut values.jellyfin_lyrics_offered, "Jellyfin"),
         (&mut values.plex_lyrics_offered, "Plex"),
@@ -3553,6 +3560,7 @@ mod tests {
             values.lyrics_provider_priority,
             [
                 LOCAL,
+                "Navidrome",
                 "Subsonic",
                 "Jellyfin",
                 "Plex",

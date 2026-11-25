@@ -4,7 +4,11 @@
 //! Almost nothing, as it turns out. The server hands over an ordinary audio file, so the stream
 //! takes the bytes as they come and rodio decodes them. The threads, the queue, the preload and
 //! the gapless join are the engine's.
+//!
+//! A seek beyond a progressive FLAC, Ogg or MP3 download uses the shared ranged reader when
+//! the server supplies the file length and accepts byte ranges.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -14,6 +18,7 @@ use crate::aac::Aac;
 use crate::engine::{self, Fetch, Loudness};
 use crate::mp4::{Input, Prepared, Remote};
 use crate::navidrome::client::{Details, NavidromeClient};
+use crate::ranged;
 use crate::stream::{Plain, Stream};
 use crate::{PlaybackConfig, PlaybackEvents, PlaybackFactory, Player};
 
@@ -23,6 +28,8 @@ pub struct Loaded {
     stream: Stream,
     details: Details,
     prepared: Prepared,
+    /// A file a seek can enter before the sequential download reaches the target.
+    file: Option<Arc<ranged::File>>,
 }
 
 pub struct Factory {
@@ -40,6 +47,7 @@ impl PlaybackFactory for Factory {
         engine::start(
             Navidrome {
                 client: self.client.clone(),
+                media: ranged::media("navidrome", || self.client.http().clone()),
             },
             config,
         )
@@ -48,6 +56,8 @@ impl PlaybackFactory for Factory {
 
 struct Navidrome {
     client: NavidromeClient,
+    /// Bounds stalled media requests without changing the native api's connection pool.
+    media: reqwest::Client,
 }
 
 #[async_trait]
@@ -64,23 +74,28 @@ impl Fetch for Navidrome {
     async fn load(&self, id: &str) -> Result<Loaded> {
         let (stream, details) = tokio::join!(
             async {
-                let response = self.client.open_stream(id).await?;
+                let response = self.client.open_stream(&self.media, id).await?;
                 let remote = Remote::new(&response);
+                let seekable = ranged::ranges(&response);
                 let mut stream = Stream::open(response, Plain).await?;
                 let prepared = Prepared::load(
                     &mut stream,
                     remote.as_ref().map(|remote| (self.client.http(), remote)),
                 )
                 .await?;
-                anyhow::Ok((stream, prepared))
+                let file = remote
+                    .filter(|_| seekable)
+                    .and_then(|remote| remote.file("navidrome", id, self.media.clone(), &stream));
+                anyhow::Ok((stream, prepared, file))
             },
             self.client.details(id),
         );
-        let (stream, prepared) = stream?;
+        let (stream, prepared, file) = stream?;
         Ok(Loaded {
             stream,
             details,
             prepared,
+            file,
         })
     }
 
@@ -124,6 +139,23 @@ impl Fetch for Navidrome {
             );
         }
         Some(decoder)
+    }
+
+    /// Starts a ranged download near `at` when the main download is still far away. A format
+    /// or server that cannot do that keeps the ordinary progressive decoder.
+    fn open_near(
+        &self,
+        id: &str,
+        loaded: &Loaded,
+        at: Duration,
+    ) -> Option<(Self::Source, Duration)> {
+        let file = loaded.file.as_ref().zip(loaded.details.duration);
+        let entered = file.and_then(|(file, length)| {
+            file.enter(&loaded.stream, length, at, |reader| {
+                ranged::forward("navidrome", id, Input::spliced(reader))
+            })
+        });
+        entered.or_else(|| self.open(id, loaded, at).map(|source| (source, at)))
     }
 
     /// A progressive file opens without seeking, so later seeks reopen it with its current length.
