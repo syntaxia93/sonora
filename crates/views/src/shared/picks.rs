@@ -289,48 +289,46 @@ impl RenderOnce for Picks {
                             },
                             |this| {
                                 this.children((0..shape.columns).map(|column| {
-                                    column_shell(column, line).children((0..ROWS).map(
-                                        |slot| {
-                                            let place = start + column * ROWS + slot;
+                                    column_shell(column, line).children((0..ROWS).map(|slot| {
+                                        let place = start + column * ROWS + slot;
 
-                                            match &rows {
-                                                Rows::Tracks(tracks) if place < tracks.len() => {
-                                                    TrackCard::new(
-                                                        id,
-                                                        place,
-                                                        tracks.clone(),
-                                                        self.playback.clone(),
-                                                    )
-                                                    .detailed(self.detailed)
-                                                    .context(on_context_menu.clone())
-                                                    .start(on_start.clone())
-                                                    .render(cx)
-                                                    .into_any_element()
-                                                }
-
-                                                Rows::Mixed(items) if place < items.len() => {
-                                                    let context = on_context_menu.clone();
-
-                                                    cards::listed(
-                                                        (id, place),
-                                                        &items[place],
-                                                        &self.playback,
-                                                        cx,
-                                                    )
-                                                    .aria_position_in_set(place + 1)
-                                                    .aria_size_of_set(items.len())
-                                                    .when_some(context, |card, handler| {
-                                                        card.menu(move |event, window, cx| {
-                                                            handler(place, event, window, cx)
-                                                        })
-                                                    })
-                                                    .into_any_element()
-                                                }
-
-                                                _ => div().flex_none().h(row).into_any_element(),
+                                        match &rows {
+                                            Rows::Tracks(tracks) if place < tracks.len() => {
+                                                TrackCard::new(
+                                                    id,
+                                                    place,
+                                                    tracks.clone(),
+                                                    self.playback.clone(),
+                                                )
+                                                .detailed(self.detailed)
+                                                .context(on_context_menu.clone())
+                                                .start(on_start.clone())
+                                                .render(cx)
+                                                .into_any_element()
                                             }
-                                        },
-                                    ))
+
+                                            Rows::Mixed(items) if place < items.len() => {
+                                                let context = on_context_menu.clone();
+
+                                                cards::listed(
+                                                    (id, place),
+                                                    &items[place],
+                                                    &self.playback,
+                                                    cx,
+                                                )
+                                                .aria_position_in_set(place + 1)
+                                                .aria_size_of_set(items.len())
+                                                .when_some(context, |card, handler| {
+                                                    card.menu(move |event, window, cx| {
+                                                        handler(place, event, window, cx)
+                                                    })
+                                                })
+                                                .into_any_element()
+                                            }
+
+                                            _ => div().flex_none().h(row).into_any_element(),
+                                        }
+                                    }))
                                 }))
                             },
                         ),

@@ -412,7 +412,9 @@ impl Render for Workspace {
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .when(!theme.transparent && !immersive, |this| this.bg(theme.sidebar))
+                    .when(!theme.transparent && !immersive, |this| {
+                        this.bg(theme.sidebar)
+                    })
                     .when(!overlay, |this| this.child(sidebar))
                     .child(
                         div()
@@ -484,7 +486,9 @@ impl Render for Workspace {
                                 this.child(island_fade(bar_height, window, cx))
                             })
                             .child(self.swipe_cue.clone())
-                            .when(!immersive, |this| this.child(sheet_frame(corners, edges, cx))),
+                            .when(!immersive, |this| {
+                                this.child(sheet_frame(corners, edges, cx))
+                            }),
                     )
                     .child(sidebar_right)
                     .when(overlay, |this| this.child(self.sidebar.clone())),
