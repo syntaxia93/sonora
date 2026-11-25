@@ -15,7 +15,7 @@ use ui::{
     snapped,
 };
 
-use crate::shared::album_grid::CardGrid;
+use crate::shared::album_grid::{CardGrid, CardLayout};
 use crate::shared::cards;
 
 const PLATE: Pixels = px(260.);
@@ -83,7 +83,7 @@ impl Shelves {
                         div()
                             .flex()
                             .px(theme.metrics.inset)
-                            .gap_4()
+                            .gap(row_gap(width, layout))
                             .overflow_hidden()
                             .children((0..=layout.columns).map(|place| {
                                 Card::skeleton(self.tag("pending", shelf * 100 + place))
@@ -241,6 +241,11 @@ impl Shelves {
         let card = layout.card;
         let tall = Card::tile_height(card, window, cx);
         let inset = cx.theme().metrics.inset;
+        // The gap spreads the room the cards leave exactly, unlike the grid's whole-pixel gap,
+        // so a full row ends on the content's right edge and an arrow press moves one row.
+        let gap = row_gap(width, layout);
+        let page = (card + gap) * layout.columns as f32;
+        let line = heading_line(window, cx);
 
         div()
             .flex()
@@ -268,7 +273,7 @@ impl Shelves {
                             .invisible()
                             .group_hover("rail-actions", |style| style.visible())
                             .when(crowded, |this| {
-                                this.child(self.arrows(place, &handle, &glide, me))
+                                this.child(self.arrows(place, page, line, &handle, &glide, me))
                             }),
                     ),
             )
@@ -300,7 +305,7 @@ impl Shelves {
                             .across()
                             .hold()
                             .rows(section.items.iter().map(|_| card))
-                            .gap(RAIL_GAP)
+                            .gap(gap)
                             .draw(move |index, _, cx| {
                                 let Some(view) = drawn.upgrade() else {
                                     return div().into_any_element();
@@ -327,6 +332,8 @@ impl Shelves {
     fn arrows(
         &self,
         place: usize,
+        page: Pixels,
+        line: Pixels,
         handle: &ScrollHandle,
         glide: &Glide,
         me: &WeakEntity<Self>,
@@ -339,12 +346,15 @@ impl Shelves {
             .flex_none()
             .items_center()
             .gap_1()
+            // As tall as the heading's line and at the bottom of the head with it, so the
+            // arrows centre on the title.
+            .h(line)
             .child(
-                self.arrow(self.tag("previous", place), false, handle, glide, me)
+                self.arrow(self.tag("previous", place), false, page, handle, glide, me)
                     .disabled(at >= -STEADY),
             )
             .child(
-                self.arrow(self.tag("next", place), true, handle, glide, me)
+                self.arrow(self.tag("next", place), true, page, handle, glide, me)
                     .disabled(reach > Pixels::ZERO && at <= STEADY - reach),
             )
             .into_any_element()
@@ -354,6 +364,7 @@ impl Shelves {
         &self,
         id: impl Into<ElementId>,
         forward: bool,
+        page: Pixels,
         handle: &ScrollHandle,
         glide: &Glide,
         me: &WeakEntity<Self>,
@@ -374,7 +385,7 @@ impl Shelves {
                 false => "common-previous",
             })
             .on_click(move |_, window, cx| {
-                slide(&handle, &glide, forward, window);
+                slide(&handle, &glide, forward, Some(page), window);
                 me.update(cx, |_, cx| cx.notify()).ok();
             })
     }
@@ -531,10 +542,31 @@ fn spread(cards: Vec<AnyElement>, lanes: usize) -> Div {
         }))
 }
 
+/// How tall the line of a shelf or panel heading stands, measured the way gpui lays out the
+/// heading's text, so paging arrows beside the heading can centre on it.
+pub(crate) fn heading_line(window: &Window, cx: &App) -> Pixels {
+    let size = cx.theme().text(Text::Title);
+    window.pixel_snap(
+        window
+            .text_style()
+            .line_height
+            .to_pixels(size.into(), window.rem_size()),
+    )
+}
+
 fn head(window: &Window, cx: &App) -> Pixels {
     let theme = *cx.theme();
 
     snapped(theme.text(Text::Title) * LEADING, window).max(theme.metrics.control_small)
+}
+
+/// The gap between a rail's cards that makes `layout.columns` of them span `width` exactly.
+/// A rail of one column keeps the usual gap to the card after it.
+fn row_gap(width: Pixels, layout: CardLayout) -> Pixels {
+    match layout.columns > 1 {
+        true => (width - layout.card * layout.columns as f32) / (layout.columns - 1) as f32,
+        false => RAIL_GAP,
+    }
 }
 
 fn dressed(card: Card, tile: Option<Pixels>, cx: &App) -> Card {
@@ -544,8 +576,16 @@ fn dressed(card: Card, tile: Option<Pixels>, cx: &App) -> Card {
     }
 }
 
-fn slide(handle: &ScrollHandle, glide: &Glide, forward: bool, window: &mut Window) {
-    let page = handle.bounds().size.width;
+/// Glides a rail one page sideways: `page` when the caller knows its row of cards, the
+/// scroller's width otherwise.
+fn slide(
+    handle: &ScrollHandle,
+    glide: &Glide,
+    forward: bool,
+    page: Option<Pixels>,
+    window: &mut Window,
+) {
+    let page = page.unwrap_or_else(|| handle.bounds().size.width);
     let at = glide.goal(handle);
     let next = match forward {
         true => at.x - page,
@@ -788,7 +828,7 @@ fn arrow(
             false => "common-previous",
         })
         .on_click(move |_, window, cx| {
-            slide(&scroll, &glide, forward, window);
+            slide(&scroll, &glide, forward, None, window);
             notify(cx);
         })
 }

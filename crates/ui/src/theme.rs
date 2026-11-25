@@ -33,6 +33,9 @@ const NEUTRAL_PIVOT: f32 = 0.5;
 /// The least lightness gap `legible` leaves between a tint and the surface under it.
 const LEGIBLE_DISTANCE: f32 = 0.34;
 const SYSTEM_FILLS: bool = cfg!(target_os = "windows");
+/// Whether the compositor can make the window see-through on its own, such as a Hyprland or
+/// KWin rule that dims an unfocused window. Window blur then stays available at full opacity.
+pub const COMPOSITOR_OPACITY: bool = cfg!(any(target_os = "linux", target_os = "freebsd"));
 
 /// What a fill keeps of itself once the window is fully see-through. The page
 /// background has no floor — a clear window is the point — but everything drawn
@@ -78,10 +81,11 @@ impl WindowBlur {
 }
 
 /// The window background a look asks the platform for. Blur needs something to show through,
-/// so only a see-through window gets it, and only an opaque one can take the platform's own
-/// fill. A platform that cannot blur draws a blurred background as a plain see-through one.
+/// so it goes to a see-through window, or to any window where the compositor can make it
+/// see-through. Only an opaque window can take the platform's own fill. A platform that cannot
+/// blur draws a blurred background as a plain see-through one.
 pub fn backdrop(blur_window: bool, transparent: bool) -> WindowBackgroundAppearance {
-    match blur_window && transparent {
+    match blur_window && (transparent || COMPOSITOR_OPACITY) {
         true => WindowBackgroundAppearance::Blurred,
         false => match SYSTEM_FILLS && !transparent {
             true => WindowBackgroundAppearance::Opaque,
@@ -231,6 +235,10 @@ pub struct ThemeOverrides {
     pub table_hover: Option<String>,
     pub table_active: Option<String>,
     pub table_active_border: Option<String>,
+    pub status_error: Option<String>,
+    pub status_success: Option<String>,
+    pub status_warning: Option<String>,
+    pub status_info: Option<String>,
     pub radius: Option<f32>,
     pub font_size: Option<f32>,
 }
@@ -279,6 +287,10 @@ impl ThemeOverrides {
             table_hover,
             table_active,
             table_active_border,
+            status_error,
+            status_success,
+            status_warning,
+            status_info,
         );
         self.radius = overlay.radius.or(self.radius);
         self.font_size = overlay.font_size.or(self.font_size);
@@ -320,6 +332,10 @@ impl ThemeOverrides {
                 | "table_hover"
                 | "table_active"
                 | "table_active_border"
+                | "status_error"
+                | "status_success"
+                | "status_warning"
+                | "status_info"
         )
     }
 
@@ -366,6 +382,10 @@ impl ThemeOverrides {
             table_hover,
             table_active,
             table_active_border,
+            status_error,
+            status_success,
+            status_warning,
+            status_info,
         );
         None
     }
@@ -422,6 +442,13 @@ pub struct Theme {
     pub table_hover: Hsla,
     pub table_active: Hsla,
     pub table_active_border: Hsla,
+    /// The hues of a status mark drawn on a popover, such as the icon of a toast that failed,
+    /// succeeded, warns or informs. They are bright enough to read as an icon, unlike `danger`,
+    /// which fills a button.
+    pub status_error: Hsla,
+    pub status_success: Hsla,
+    pub status_warning: Hsla,
+    pub status_info: Hsla,
     pub radius: Pixels,
     pub font_size: Pixels,
     pub metrics: Metrics,
@@ -450,7 +477,7 @@ impl Global for Transition {}
 impl Theme {
     pub fn dark() -> Self {
         Self {
-            background: rgb(0x0a0a0a).into(),
+            background: rgb(0x0b0b0b).into(),
             foreground: rgb(0xfafafa).into(),
             border: rgba(0x50505066).into(),
             muted: rgb(0x262626).into(),
@@ -470,9 +497,9 @@ impl Theme {
             popover_foreground: rgb(0xfafafa).into(),
             progress_bar: rgb(0xf5f5f5).into(),
             selection: rgb(0x1d4ed8).into(),
-            sidebar: rgb(0x0a0a0a).into(),
+            sidebar: rgb(0x070707).into(),
             sidebar_accent: rgba(0x50505066).into(),
-            sidebar_border: rgb(0x262626).into(),
+            sidebar_border: rgb(0x181818).into(),
             title_bar_border: rgb(0x262626).into(),
             table_head: rgba(0x171717cc).into(),
             table_head_foreground: rgb(0x8a8a8a).into(),
@@ -480,6 +507,10 @@ impl Theme {
             table_hover: rgba(0x50505033).into(),
             table_active: rgba(0x1e40af33).into(),
             table_active_border: rgb(0x1d4ed8).into(),
+            status_error: rgb(0xff6369).into(),
+            status_success: rgb(0x4ade80).into(),
+            status_warning: rgb(0xfbbf24).into(),
+            status_info: rgb(0x60a5fa).into(),
             radius: px(6.),
             font_size: px(14.),
             metrics: Metrics::default(),
@@ -513,9 +544,9 @@ impl Theme {
             popover_foreground: rgb(0x171717).into(),
             progress_bar: rgb(0x262626).into(),
             selection: rgb(0x2563eb).into(),
-            sidebar: rgb(0xf5f5f5).into(),
+            sidebar: rgb(0xededed).into(),
             sidebar_accent: rgba(0xcdcdcd66).into(),
-            sidebar_border: rgb(0xd4d4d4).into(),
+            sidebar_border: rgb(0xe4e4e4).into(),
             title_bar_border: rgb(0xd4d4d4).into(),
             table_head: rgba(0xf5f5f5e6).into(),
             table_head_foreground: rgb(0x666666).into(),
@@ -523,6 +554,10 @@ impl Theme {
             table_hover: rgba(0xcdcdcd33).into(),
             table_active: rgba(0x2563eb1f).into(),
             table_active_border: rgb(0x2563eb).into(),
+            status_error: rgb(0xdc2626).into(),
+            status_success: rgb(0x16a34a).into(),
+            status_warning: rgb(0xd97706).into(),
+            status_info: rgb(0x2563eb).into(),
             radius: px(6.),
             font_size: px(14.),
             metrics: Metrics::default(),
@@ -730,6 +765,10 @@ impl Theme {
             table_hover,
             table_active,
             table_active_border,
+            status_error,
+            status_success,
+            status_warning,
+            status_info,
         );
         theme
     }
@@ -773,6 +812,10 @@ impl Theme {
         apply_color!(table_hover);
         apply_color!(table_active);
         apply_color!(table_active_border);
+        apply_color!(status_error);
+        apply_color!(status_success);
+        apply_color!(status_warning);
+        apply_color!(status_info);
 
         if let Some(radius) = overrides.radius {
             self.radius = px(radius.clamp(0., 24.));

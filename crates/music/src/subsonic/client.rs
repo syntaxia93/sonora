@@ -25,8 +25,8 @@ use crate::subsonic::wire;
 use crate::{
     Album, AlbumCatalogue, AlbumDetail, Artist, ArtistProfile, Codec, CoverSize, Genre,
     GenreDetail, GenreItem, GenreSection, HomeFeed, MediaKind, MusicApi, Playlist, PlaylistDetail,
-    Report, SUGGESTIONS, SavedArtist, SmartPlaylist, SmartRules, Track, Transcode, UserProfile,
-    distinct_covers, iso_8601_to_epoch,
+    RadioSeed, Report, SUGGESTIONS, SavedArtist, SmartPlaylist, SmartRules, Track, Transcode,
+    UserProfile, distinct_covers, iso_8601_to_epoch,
 };
 
 const PORTRAIT_LIMIT: usize = 24;
@@ -241,6 +241,26 @@ impl SubsonicClient {
         let albums = Arc::new(self.scoped_album_ids(&folder).await?);
         *scope = Some((Instant::now(), albums.clone()));
         Ok(Some(albums))
+    }
+
+    /// The songs of a similar-songs answer that are in the chosen library, since those endpoints
+    /// take no library. `None` when the library's albums cannot be read.
+    async fn held(&self, songs: Vec<Child>) -> Option<Vec<Track>> {
+        let held = self.library_albums().await.ok()?;
+        Some(
+            songs
+                .into_iter()
+                .map(|song| self.song(song))
+                .filter(|track| {
+                    held.as_ref().is_none_or(|held| {
+                        track
+                            .album_id
+                            .as_deref()
+                            .is_some_and(|album| held.contains(album))
+                    })
+                })
+                .collect(),
+        )
     }
 
     /// Every album id in the given library, paged through the empty-query search that every
@@ -722,6 +742,12 @@ impl SubsonicClient {
 
 #[async_trait]
 impl MusicApi for SubsonicClient {
+    /// Follows each track's own artwork while keeping the original resolution used by lists
+    /// and albums, so the player never replaces a clear cover with a smaller copy.
+    fn cover_at(&self, cover: &str, _size: CoverSize) -> Option<String> {
+        self.cover_original(cover)
+    }
+
     fn cover_original(&self, cover: &str) -> Option<String> {
         cover_url_at(&self.covers, cover, CoverSize::Full)
     }
@@ -1437,27 +1463,13 @@ impl MusicApi for SubsonicClient {
             .get_similar_songs2(track_id, Some(RADIO_COUNT))
             .await
             .map_err(bare);
-        // getSimilarSongs2 takes no library, so its answer keeps only the chosen library's songs,
-        // and a membership that cannot be read leaves the answer to the scoped fallback.
+        // a membership that cannot be read leaves the answer to the scoped fallback
         if let Ok(songs) = similar
             && !songs.is_empty()
-            && let Ok(held) = self.library_albums().await
+            && let Some(songs) = self.held(songs).await
+            && !songs.is_empty()
         {
-            let songs: Vec<Track> = songs
-                .into_iter()
-                .map(|song| self.song(song))
-                .filter(|track| {
-                    held.as_ref().is_none_or(|held| {
-                        track
-                            .album_id
-                            .as_deref()
-                            .is_some_and(|album| held.contains(album))
-                    })
-                })
-                .collect();
-            if !songs.is_empty() {
-                return Ok((songs, None));
-            }
+            return Ok((songs, None));
         }
         let random = self
             .client
@@ -1473,6 +1485,23 @@ impl MusicApi for SubsonicClient {
                 .collect(),
             None,
         ))
+    }
+
+    /// The songs `getSimilarSongs` finds like a whole album or artist, kept to the chosen
+    /// library. An answer with nothing in it leaves the radio to be blended.
+    async fn collection_radio(
+        &self,
+        _seed: RadioSeed,
+        id: &str,
+        _from: Option<&str>,
+    ) -> Result<(Vec<Track>, Option<String>)> {
+        let songs = self
+            .client
+            .get_similar_songs(id, Some(RADIO_COUNT))
+            .await
+            .map_err(bare)
+            .context("cannot load similar songs")?;
+        Ok((self.held(songs).await.unwrap_or_default(), None))
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Track>> {
@@ -1552,14 +1581,33 @@ impl MusicApi for SubsonicClient {
             })
             .unwrap_or_default();
 
-        let newest = self.album_list(AlbumListType::Newest, HOME_ALBUMS).await;
-        let frequent = self.album_list(AlbumListType::Frequent, HOME_ALBUMS).await;
+        let added = self
+            .album_list(AlbumListType::Newest, AlbumListOptions::new())
+            .await;
+        // `byYear` counts down when `fromYear` is the later year, so the newest releases come
+        // first. 1900 is the floor Subsonic clients use for "every year".
+        let this_year = i32::from(jiff::Zoned::now().year());
+        let releases = self
+            .album_list(
+                AlbumListType::ByYear,
+                AlbumListOptions::new().from_year(this_year).to_year(1900),
+            )
+            .await;
+        let frequent = self
+            .album_list(AlbumListType::Frequent, AlbumListOptions::new())
+            .await;
 
         let mut sections = Vec::new();
-        if !newest.is_empty() {
+        if !added.is_empty() {
             sections.push(GenreSection {
-                title: "home-newest-albums".to_owned(),
-                items: newest.into_iter().map(GenreItem::Album).collect(),
+                title: "home-recently-added".to_owned(),
+                items: added.into_iter().map(GenreItem::Album).collect(),
+            });
+        }
+        if !releases.is_empty() {
+            sections.push(GenreSection {
+                title: "home-newest-releases".to_owned(),
+                items: releases.into_iter().map(GenreItem::Album).collect(),
             });
         }
         if !frequent.is_empty() {
@@ -1666,13 +1714,15 @@ impl SubsonicClient {
         Ok(())
     }
 
+    /// One Home shelf of albums, `HOME_ALBUMS` long, from `getAlbumList2` with the caller's
+    /// extra options. A failed request is an empty shelf, which Home leaves out.
     async fn album_list(
         &self,
         kind: opensubsonic::api::lists::AlbumListType,
-        size: i32,
+        options: AlbumListOptions,
     ) -> Vec<Album> {
         self.client
-            .get_album_list2(kind, &self.scoped(AlbumListOptions::new().size(size)))
+            .get_album_list2(kind, &self.scoped(options.size(HOME_ALBUMS)))
             .await
             .map_err(bare)
             .map(|albums| {
@@ -1797,10 +1847,11 @@ impl SubsonicClient {
         format!("{}@{}", self.username, self.server)
     }
 
-    /// Opens the audio of a track, converted as `transcode` asks, and answers once the response
-    /// headers are in. The body is still on its way.
+    /// Opens the audio of a track through `http`, converted as `transcode` asks, and answers
+    /// once the response headers are in. The body is still on its way.
     pub async fn open_stream(
         &self,
+        http: &reqwest::Client,
         track_id: &str,
         transcode: Transcode,
     ) -> Result<reqwest::Response> {
@@ -1817,8 +1868,7 @@ impl SubsonicClient {
             .client
             .stream_url(track_id, &options)
             .context("cannot build the stream url")?;
-        self.http
-            .get(url)
+        http.get(url)
             .send()
             .await
             .map_err(reqwest::Error::without_url)
@@ -2274,12 +2324,12 @@ mod tests {
 
         let asked = stub.asked();
         let endpoints = endpoints(&asked);
-        // home asks for random songs and two album lists; the radio fallback asks for more
+        // home asks for random songs and three album lists; the radio fallback asks for more
         // random songs after the similar-songs call fails its parse.
         let expected = [
             ("getStarred2", 3),
             ("search3", 4),
-            ("getAlbumList2", 5),
+            ("getAlbumList2", 6),
             ("getSongsByGenre", 1),
             ("getArtists", 1),
             ("getRandomSongs", 2),

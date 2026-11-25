@@ -96,6 +96,11 @@ const SONGS_QUERY: &[(&str, &str)] = &[
 const CATALOG_QUERY: &[(&str, &str)] = &[("include", "catalog")];
 const ALBUMS_QUERY: &[(&str, &str)] = &[("include", "catalog,artists"), ALBUM_ARTISTS];
 
+/// How long opening a connection may take, shared out across every address the host resolves
+/// to. Without it an unreachable Apple edge holds a request for the OS connect timeout, 21 s
+/// per address on Windows, before the next address is tried.
+const CONNECT: Duration = Duration::from_secs(8);
+
 /// Asks for the artists behind every album in an answer, nested ones included. Apple otherwise
 /// names them in one string with no id, and a card cannot link to an artist without one. Only
 /// the typed form reaches albums inside a view or under a library row.
@@ -263,6 +268,7 @@ impl AppleClient {
     pub async fn connect(user_token: &str) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(AGENT)
+            .connect_timeout(CONNECT)
             .build()
             .context("cannot build the apple http client")?;
         let bearer = auth::bearer(&http).await?;
@@ -1538,20 +1544,20 @@ impl MusicApi for AppleClient {
             .collect())
     }
 
-    /// The songs the listener has added. Only the ones with a catalog id are listed: an upload
-    /// has no catalog encode behind it, and this path plays catalog tracks.
+    /// The songs the listener has added, uploads included. A second copy of a catalog song
+    /// keeps its library id so the two stay apart.
     async fn all_tracks(&self) -> Result<Vec<Track>> {
+        let songs = wire::LibrarySongs::default();
         self.walk(SONGS, PAGE, SONGS_QUERY, |row| {
-            wire::library_song(row, &self.root_genre)
+            songs.read(row, &self.root_genre)
         })
         .await
     }
 
     async fn all_tracks_paged(&self) -> Result<Pages<Track>> {
         let root = self.root_genre.clone();
-        Ok(self.paged(SONGS, PAGE, SONGS_QUERY, move |row| {
-            wire::library_song(row, &root)
-        }))
+        let songs = wire::LibrarySongs::default();
+        Ok(self.paged(SONGS, PAGE, SONGS_QUERY, move |row| songs.read(row, &root)))
     }
 
     async fn all_albums(&self) -> Result<Vec<Album>> {
@@ -1578,9 +1584,10 @@ impl MusicApi for AppleClient {
     /// albums and artists. The rating is the source of truth, not the Favorite Songs playlist,
     /// which only exists while the account adds favorites to its library.
     async fn saved_tracks(&self) -> Result<Vec<Track>> {
+        let read = wire::LibrarySongs::default();
         let songs = self
             .walk(SONGS, PAGE, SONGS_QUERY, |row| {
-                Some((library_id(row)?, wire::library_song(row, &self.root_genre)?))
+                Some((library_id(row)?, read.read(row, &self.root_genre)?))
             })
             .await?;
         self.rated("songs", RATED_SONGS, songs).await
@@ -1706,6 +1713,9 @@ impl MusicApi for AppleClient {
             MediaKind::Playlist => bail!("a playlist joins the library through its own call"),
         };
         match present {
+            true if Self::is_mine(id) => {
+                bail!("apple music cannot add a removed library copy {id} back")
+            }
             true => {
                 let key = format!("ids[{kind}]");
                 self.post("/me/library", &[(key.as_str(), id)], None)

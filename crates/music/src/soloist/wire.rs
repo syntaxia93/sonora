@@ -25,6 +25,11 @@ pub(super) enum Event {
     PositionSync {
         position: Position,
     },
+    /// What the daemon plays from now on, which `play` with an album or playlist sets.
+    ContextChanged {
+        #[serde(default)]
+        context: Option<Context>,
+    },
     QueueChanged {
         #[serde(default)]
         previous: Vec<Queued>,
@@ -49,9 +54,6 @@ pub(super) enum Event {
     Error {
         #[serde(default)]
         message: String,
-        /// The command the daemon rejected, when its protocol can identify one.
-        #[serde(default)]
-        command: String,
     },
     #[serde(other)]
     Other,
@@ -64,6 +66,8 @@ pub(super) struct Playback {
     pub status: Option<Status>,
     #[serde(default)]
     pub item: Option<Entity>,
+    #[serde(default)]
+    pub context: Option<Context>,
     #[serde(default)]
     pub position: Option<Position>,
     #[serde(default)]
@@ -103,11 +107,16 @@ impl Entity {
     }
 }
 
+/// The album, playlist or lone track the program plays from, of which only the URI is read.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct Context {
+    #[serde(default)]
+    pub uri: String,
+}
+
 /// One entry of what the daemon plays after the current track.
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct Queued {
-    #[serde(default)]
-    pub uid: String,
     #[serde(default)]
     source: String,
     #[serde(default)]

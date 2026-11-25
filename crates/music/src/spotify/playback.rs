@@ -14,6 +14,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
 
 use crate::audio::{Chain, Volume};
+use crate::connect::Collection;
 
 use crate::sink::Cue;
 use crate::soloist;
@@ -356,14 +357,17 @@ impl MusicPlayer for Official {
         Ok(())
     }
 
-    fn append_to_queue(&self, track_id: &str, append: crate::QueueAppend) -> Result<bool> {
-        track_uri(track_id)?;
-        self.engine.append_to_queue(track_id, append);
-        Ok(true)
+    fn unline(&self) {
+        self.engine.line_down();
     }
 
-    fn can_order_queue(&self) -> bool {
-        false
+    fn within(&self, collection: Option<&Collection>) {
+        let uri = collection.and_then(|collection| match collection {
+            Collection::Album(id) => Some(format!("spotify:album:{id}")),
+            Collection::Playlist(id) => Some(format!("spotify:playlist:{id}")),
+            Collection::Saved | Collection::Radio(_) | Collection::CollectionRadio(..) => None,
+        });
+        self.engine.within(uri);
     }
 
     fn play(&self) {
@@ -685,9 +689,10 @@ fn translate(event: PlayerEvent) -> Option<PlaybackEvent> {
             track_id: uri,
             ..
         } => Some(PlaybackEvent::Throttled { id: track_id(uri) }),
-        PlayerEvent::Unavailable { track_id: uri, .. } => {
-            Some(PlaybackEvent::Unavailable { id: track_id(uri) })
-        }
+        PlayerEvent::Unavailable { track_id: uri, .. } => Some(PlaybackEvent::Unavailable {
+            id: track_id(uri),
+            timed_out: false,
+        }),
         _ => None,
     }
 }
