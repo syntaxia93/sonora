@@ -2,6 +2,16 @@ use gpui::{App, Context, Entity, Task};
 use state::{AppSettings, Playback, QueuePosition, Reloaded, Sonora};
 use ui::{ActiveTheme as _, CoverPalette, Look, Theme, ThemeKind, ThemeOverrides};
 
+/// How dark the page tint reads in a dark theme, and how light in a light one.
+const PAGE_DARK_LIGHTNESS: f32 = 0.16;
+const PAGE_LIGHT_LIGHTNESS: f32 = 0.94;
+/// How much of the cover's saturation the page keeps, and the ceiling it may not pass: a page is
+/// a shade of the art, not the art itself.
+const PAGE_SATURATION: f32 = 0.5;
+const PAGE_SATURATION_MAX: f32 = 0.42;
+/// A pale page carries chroma further, so a light theme keeps less of it.
+const PAGE_LIGHT_SATURATION: f32 = 0.4;
+
 /// Drives the theme's tint from the playing track's cover, and keeps the next
 /// track's cover sampled ahead of time so a track change recolours on the frame
 /// it happens rather than once a download and a decode have come back.
@@ -115,6 +125,14 @@ impl Adaptive {
                 self.apply(palette, instant, cx);
             }
             None => {
+                // Fullscreen must not open in the workspace's theme while its cover is sampled,
+                // so a change of dress goes on at once and the cover's colours fade in after.
+                let (kind, _) = self.dress(cx);
+                let redress = instant && self.worn != Some((kind, self.plain(cx)));
+                if redress {
+                    self.apply(self.painted, true, cx);
+                }
+                let instant = instant && !redress;
                 let palette = ui::palette(cover, cx);
                 self.task = Some(cx.spawn(async move |this, cx| {
                     let palette = palette.await;
@@ -240,6 +258,35 @@ pub(crate) fn stage(palette: CoverPalette, cx: &App) -> Theme {
         ..settings.look()
     };
     Theme::for_look(look, &stripped(settings.theme_overrides()))
+}
+
+/// The workspace's ground, shared by its page, transitions and island fade. The supplied theme
+/// keeps a workspace leaving for fullscreen in the look it wore before fullscreen changed it.
+pub(crate) fn workspace_background(theme: &Theme, cx: &App) -> gpui::Hsla {
+    let sonora = Sonora::global(cx);
+    if !sonora.settings.read(cx).immersive() {
+        return theme.background;
+    }
+    let tint = sonora
+        .playback
+        .read(cx)
+        .shown_track(cx)
+        .and_then(|track| track.cover)
+        .and_then(|cover| ui::cover_palette(&cover, cx))
+        .and_then(|palette| palette.primary);
+
+    tint.map_or(theme.background, |tint| gpui::Hsla {
+        h: tint.h,
+        s: match theme.background.l < 0.5 {
+            true => (tint.s * PAGE_SATURATION).min(PAGE_SATURATION_MAX),
+            false => tint.s * PAGE_SATURATION * PAGE_LIGHT_SATURATION,
+        },
+        l: match theme.background.l < 0.5 {
+            true => PAGE_DARK_LIGHTNESS,
+            false => PAGE_LIGHT_LIGHTNESS,
+        },
+        a: theme.background.a,
+    })
 }
 
 /// The overrides with every colour taken out, leaving the radius and font size.

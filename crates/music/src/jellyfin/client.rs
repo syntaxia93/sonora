@@ -20,7 +20,7 @@ use crate::jellyfin::wire::{self, Covers, Item, Items, Permission, PlaylistInfo}
 use crate::{
     Album, AlbumCatalogue, AlbumDetail, Artist, ArtistCatalogue, ArtistProfile, Codec, CoverSize,
     Encoding, Genre, GenreDetail, GenreItem, GenreSection, HomeFeed, MediaKind, MusicApi, Page,
-    Pages, Playlist, PlaylistDetail, Report, SUGGESTIONS, SavedArtist, SignInFailure,
+    Pages, Playlist, PlaylistDetail, RadioSeed, Report, SUGGESTIONS, SavedArtist, SignInFailure,
     SignInProblem, Track, Transcode, UserProfile, distinct_covers,
 };
 
@@ -344,15 +344,15 @@ impl JellyfinClient {
         }
     }
 
-    /// Opens the audio of a track, converted as `transcode` asks, and answers once the response
-    /// headers are in. The body is still on its way.
+    /// Opens the audio of a track through `http`, converted as `transcode` asks, and answers
+    /// once the response headers are in. The body is still on its way.
     pub async fn open_stream(
         &self,
+        http: &reqwest::Client,
         track_id: &str,
         transcode: Transcode,
     ) -> Result<reqwest::Response> {
-        let response = self
-            .http
+        let response = http
             .get(self.stream_url(track_id, transcode))
             .header(AUTHORIZATION, &self.header)
             .send()
@@ -1272,6 +1272,17 @@ impl MusicApi for JellyfinClient {
         ))
     }
 
+    /// The instant mix of a whole album, playlist or artist, which Jellyfin serves through the
+    /// same endpoint as a track's.
+    async fn collection_radio(
+        &self,
+        _seed: RadioSeed,
+        id: &str,
+        from: Option<&str>,
+    ) -> Result<(Vec<Track>, Option<String>)> {
+        self.track_radio(id, from).await
+    }
+
     async fn search(&self, query: &str) -> Result<Vec<Track>> {
         let found = self.search_kind("Audio", query, SEARCH_TRACKS).await?;
         Ok(found
@@ -1396,7 +1407,7 @@ impl MusicApi for JellyfinClient {
             shelf("home-recently-added", latest),
             shelf("home-most-played", most_played),
             shelf("home-favorite-albums", favorites),
-            shelf("home-playlists", playlists),
+            shelf("nav-playlists", playlists),
         ]
         .into_iter()
         .flatten()
@@ -2020,7 +2031,7 @@ mod tests {
 
         let url = client.stream_url("t 1", Transcode::default());
         let response = client
-            .open_stream("t1", Transcode::default())
+            .open_stream(&client.http, "t1", Transcode::default())
             .await
             .unwrap();
 

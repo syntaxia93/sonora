@@ -8,11 +8,11 @@ use tokio::task::JoinSet;
 use ytmusic::YtMusic;
 
 use crate::cover::{self, CoverLimits};
-use crate::youtube::{genres, radio, subscriptions, wire};
+use crate::youtube::{genres, radio, search, subscriptions, wire};
 use crate::{
     Album, AlbumCatalogue, AlbumDetail, Artist, ArtistCatalogue, ArtistProfile, Feed, Genre,
-    GenreDetail, HomeFeed, MediaKind, MusicApi, Playlist, PlaylistDetail, SUGGESTIONS, SavedArtist,
-    Track, UserProfile, escape,
+    GenreDetail, HomeFeed, MediaKind, MusicApi, Playlist, PlaylistDetail, RadioSeed, SUGGESTIONS,
+    SavedArtist, Track, UserProfile, escape,
 };
 
 const PORTRAIT_LIMIT: usize = 24;
@@ -391,7 +391,9 @@ impl MusicApi for YouTubeClient {
     async fn playlist(&self, playlist_id: &str) -> Result<PlaylistDetail> {
         let mut detail = self.api.playlist_page(playlist_id).await?;
         detail.tracks = self.api.swap_playable(detail.tracks).await;
-        Ok(wire::playlist_detail(detail))
+        let mut detail = wire::playlist_detail(detail);
+        name_owned_playlist(&mut detail.playlist, &self.account);
+        Ok(detail)
     }
 
     async fn playlist_continuation(
@@ -428,10 +430,26 @@ impl MusicApi for YouTubeClient {
         radio::station(&self.api, track_id, from).await
     }
 
+    async fn collection_radio(
+        &self,
+        seed: RadioSeed,
+        id: &str,
+        from: Option<&str>,
+    ) -> Result<(Vec<Track>, Option<String>)> {
+        let playlist = match seed {
+            RadioSeed::Playlist => format!("RDAMPL{}", id.strip_prefix("VL").unwrap_or(id)),
+            RadioSeed::Album => {
+                let album = self.api.album(id).await?.album;
+                let playlist = album.playlist_id.context("album has no playlist")?;
+                format!("RDAMPL{playlist}")
+            }
+            RadioSeed::Artist => radio::artist_seed(&self.api, id).await?,
+        };
+        radio::collection(&self.api, &playlist, from).await
+    }
+
     async fn search(&self, query: &str) -> Result<Vec<Track>> {
-        Ok(self
-            .api
-            .search_songs(query)
+        Ok(search::tracks(&self.api, query)
             .await?
             .into_iter()
             .enumerate()
@@ -442,7 +460,7 @@ impl MusicApi for YouTubeClient {
     async fn search_albums(&self, query: &str) -> Result<Vec<Album>> {
         Ok(self
             .api
-            .search_albums(query)
+            .search_albums_with(query, false)
             .await?
             .into_iter()
             .map(wire::album)
@@ -456,7 +474,7 @@ impl MusicApi for YouTubeClient {
     async fn search_playlists(&self, query: &str) -> Result<Vec<Playlist>> {
         Ok(self
             .api
-            .search_playlists(query)
+            .search_playlists_with(query, false)
             .await?
             .into_iter()
             .map(|playlist| wire::playlist(playlist, false, false))
@@ -523,6 +541,15 @@ pub(crate) fn library_playlist(source: ytmusic::Playlist, account: &str) -> Opti
     }
 
     Some(playlist)
+}
+
+/// Names an owned playlist after the account, as the library listing does. YouTube leaves the
+/// author out of an owned playlist's page, so without this its creator line vanishes once the
+/// page loads. A playlist that is not the listener's keeps whatever author the page names.
+fn name_owned_playlist(playlist: &mut Playlist, account: &str) {
+    if playlist.owned && playlist.owner.is_empty() {
+        playlist.owner = account.to_owned();
+    }
 }
 
 #[cfg(test)]
@@ -597,5 +624,47 @@ mod tests {
             .expect("the tile is a playlist");
 
         assert!(library_playlist(source, "Zefanya").is_none());
+    }
+
+    /// The page of a playlist as the provider reports it, with the author it names.
+    fn page(author: Option<&str>, owned: bool) -> Playlist {
+        wire::playlist(
+            ytmusic::Playlist {
+                id: "PLpage".into(),
+                title: "Page".into(),
+                author: author.map(str::to_string),
+                owned,
+                public: None,
+                track_count: Some(3),
+                thumbnails: Vec::new(),
+            },
+            owned,
+            false,
+        )
+    }
+
+    #[test]
+    fn an_owned_playlist_page_names_the_listener() {
+        let mut playlist = page(None, true);
+        name_owned_playlist(&mut playlist, "Zefanya");
+
+        assert_eq!(playlist.owner, "Zefanya");
+    }
+
+    #[test]
+    fn a_saved_playlist_page_keeps_its_author() {
+        let mut playlist = page(Some("Someone Else"), false);
+        name_owned_playlist(&mut playlist, "Zefanya");
+
+        assert!(!playlist.owned);
+        assert_eq!(playlist.owner, "Someone Else");
+    }
+
+    #[test]
+    fn a_playlist_page_without_a_creator_names_nobody() {
+        let mut playlist = page(None, false);
+        name_owned_playlist(&mut playlist, "Zefanya");
+
+        assert!(playlist.owner.is_empty());
     }
 }

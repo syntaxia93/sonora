@@ -14,10 +14,10 @@ use crate::navidrome::auth;
 use crate::navidrome::wire;
 use crate::smart::{NAVIDROME_SMART, navidrome_version};
 use crate::{
-    Album, AlbumCatalogue, AlbumDetail, Artist, ArtistProfile, Genre, GenreDetail, GenreItem,
-    GenreSection, HomeFeed, Lyrics, MediaKind, MusicApi, Page, Pages, Playlist, PlaylistDetail,
-    Report, SUGGESTIONS, SavedArtist, SmartPlaylist, SmartPlaylistUpdate, SmartRules, Track,
-    UserProfile, distinct_covers,
+    Album, AlbumCatalogue, AlbumDetail, Artist, ArtistProfile, CoverSize, Genre, GenreDetail,
+    GenreItem, GenreSection, HomeFeed, Lyrics, MediaKind, MusicApi, Page, Pages, Playlist,
+    PlaylistDetail, Report, SUGGESTIONS, SavedArtist, SmartPlaylist, SmartPlaylistUpdate,
+    SmartRules, Track, UserProfile, distinct_covers,
 };
 
 /// How many artists a page asks for pictures of at once.
@@ -558,15 +558,17 @@ impl NavidromeClient {
         }
     }
 
-    /// Opens the audio of a track and answers once the response headers are in; the body is
-    /// still on its way.
-    pub async fn open_stream(&self, track_id: &str) -> Result<reqwest::Response> {
+    /// Opens the audio of a track through `http` and answers once the response headers are in;
+    /// the body is still on its way.
+    pub async fn open_stream(
+        &self,
+        http: &reqwest::Client,
+        track_id: &str,
+    ) -> Result<reqwest::Response> {
         let url = self
             .stream_url(track_id)
             .context("cannot build the stream url")?;
-        self.inner
-            .http
-            .get(url)
+        http.get(url)
             .send()
             .await
             .map_err(reqwest::Error::without_url)
@@ -610,6 +612,21 @@ impl NavidromeClient {
 
 #[async_trait]
 impl MusicApi for NavidromeClient {
+    /// The signed artwork already names the original, including a song's own cover when it
+    /// differs from its album. Keeping it lets the player follow covers within one album.
+    fn cover_at(&self, cover: &str, _size: CoverSize) -> Option<String> {
+        self.cover_original(cover)
+    }
+
+    fn cover_original(&self, cover: &str) -> Option<String> {
+        let base = self.rest("getCoverArt")?;
+        let id = cover
+            .strip_prefix(base.as_str())?
+            .strip_prefix("&id=")?
+            .strip_suffix("&size=0")?;
+        (!id.is_empty() && !id.contains('&')).then(|| cover.to_owned())
+    }
+
     fn share_url(&self, _kind: MediaKind, _id: &str) -> Option<String> {
         None
     }
@@ -1102,17 +1119,24 @@ impl MusicApi for NavidromeClient {
     }
 
     async fn home(&self) -> Result<HomeFeed> {
-        let random = self.random_songs(HOME_SONGS).await;
-        let newest = self
-            .albums_sorted("recently_added", "DESC", HOME_ALBUMS)
-            .await;
-        let played = self.albums_sorted("playCount", "DESC", HOME_ALBUMS).await;
+        let (random, added, releases, played) = tokio::join!(
+            self.random_songs(HOME_SONGS),
+            self.albums_sorted("recently_added", "DESC", HOME_ALBUMS),
+            self.albums_sorted("maxYear", "DESC", HOME_ALBUMS),
+            self.albums_sorted("playCount", "DESC", HOME_ALBUMS),
+        );
 
         let mut sections = Vec::new();
-        if !newest.is_empty() {
+        if !added.is_empty() {
             sections.push(GenreSection {
-                title: "home-newest-albums".to_owned(),
-                items: newest.into_iter().map(GenreItem::Album).collect(),
+                title: "home-recently-added".to_owned(),
+                items: added.into_iter().map(GenreItem::Album).collect(),
+            });
+        }
+        if !releases.is_empty() {
+            sections.push(GenreSection {
+                title: "home-newest-releases".to_owned(),
+                items: releases.into_iter().map(GenreItem::Album).collect(),
             });
         }
         if !played.is_empty() {
