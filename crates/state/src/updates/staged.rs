@@ -79,9 +79,10 @@ impl Staged {
     }
 }
 
-/// Where downloads and the staged update's manifest live.
+/// Keeps this fork's prepared installers apart from upstream's, including its cleanup, so
+/// installing one copy after the other cannot apply a release from the wrong repository.
 pub(super) fn folder() -> Option<PathBuf> {
-    Some(dirs::cache_dir()?.join("sonora").join("updates"))
+    Some(dirs::cache_dir()?.join("sonora").join("updates-syntaxia93"))
 }
 
 /// Puts an update an earlier run staged in place and arranges for the new version to start once

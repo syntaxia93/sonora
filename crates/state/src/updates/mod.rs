@@ -770,10 +770,13 @@ async fn download(
     Ok(path)
 }
 
-/// Whether `offered` on `channel` should replace the running build. Within the running build's
-/// own channel only a newer build counts. From the other channel any build does, since choosing
-/// that channel asks to move to it.
+/// Whether a stable release should replace the running build. This fork never installs a
+/// nightly, including one found in staged metadata. Within the stable channel only newer
+/// releases count; a copy carrying old nightly metadata can return to stable.
 fn wanted(channel: Channel, offered: &str) -> bool {
+    if channel != Channel::Stable {
+        return false;
+    }
     if channel != Channel::running() {
         return true;
     }

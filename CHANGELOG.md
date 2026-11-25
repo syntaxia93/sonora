@@ -54,6 +54,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Native Navidrome lyrics can be enabled and reordered with the other lyrics sources, and existing settings gain the source once.
 - The immersive cover tint stays visible with the rounded page and Island player layout.
+- Updates prepared by the upstream app cannot replace this Windows fork on its next start.
 - Playing on an output set to 44.1 kHz no longer keeps a CPU core busy, which made audio stutter on slower laptops.
 - On Windows, changing the output device's format in the system sound settings moves Sonora to the new sample rate within a second, even while nothing plays, instead of only after a restart.
 - The playback buttons in the Windows taskbar preview are sharper, with bolder skip icons that follow the display scale.
